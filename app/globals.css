@@ -3,6 +3,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+body{
+  @apply transition-colors duration-300;
+  background-color: #211811;
+  height: 100dvh;
+  color: var(--foreground);
+}
+
+button{
+  @apply transition-colors duration-200;
+  cursor: pointer;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
