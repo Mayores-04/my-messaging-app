@@ -167,6 +167,9 @@ export const getConversationsForCurrentUser = query({
         (m: any) => m.senderEmail === otherUserEmail && m._creationTime > lastReadAt
       ).length
 
+      // Check if user is online (active within last 5 minutes)
+      const isOnline = otherUser?.lastActive ? (Date.now() - otherUser.lastActive) < 5 * 60 * 1000 : false
+
       return {
         _id: conv._id,
         otherUserEmail,
@@ -175,6 +178,7 @@ export const getConversationsForCurrentUser = query({
         lastMessage: lastMessage?.body ?? 'No messages yet',
         lastMessageAt: conv.lastMessageAt ?? conv.createdAt,
         unreadCount,
+        isOnline,
       }
     })
   },

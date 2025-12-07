@@ -33,16 +33,22 @@ export const getFriendsForCurrentUser = query({
     const allUsers = await ctx.db.query('users').collect()
     const friends = allUsers.filter((u: any) => friendEmails.includes(u.email))
 
-    return friends.map((u: any) => ({
-      _id: u._id,
-      fullName: u.fullName ?? null,
-      firstName: u.firstName ?? null,
-      email: u.email ?? null,
-      avatarUrl: u.avatarUrl ?? null,
-      lastMessage: u.lastMessage ?? null,
-      lastActive: u.lastActive ?? null,
-      unreadCount: typeof u.unreadCount === 'number' ? u.unreadCount : 0,
-    }))
+    return friends.map((u: any) => {
+      // Check if user is online (active within last 5 minutes)
+      const isOnline = u.lastActive ? (Date.now() - u.lastActive) < 5 * 60 * 1000 : false
+      
+      return {
+        _id: u._id,
+        fullName: u.fullName ?? null,
+        firstName: u.firstName ?? null,
+        email: u.email ?? null,
+        avatarUrl: u.avatarUrl ?? null,
+        lastMessage: u.lastMessage ?? null,
+        lastActive: u.lastActive ?? null,
+        unreadCount: typeof u.unreadCount === 'number' ? u.unreadCount : 0,
+        isOnline,
+      }
+    })
   },
 })
 
