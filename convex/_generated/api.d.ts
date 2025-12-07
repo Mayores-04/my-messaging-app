@@ -12,6 +12,7 @@ import type * as friends from "../friends.js";
 import type * as messages from "../messages.js";
 import type * as notification from "../notification.js";
 import type * as users from "../users.js";
+import type * as videoCalls from "../videoCalls.js";
 
 import type {
   ApiFromModules,
@@ -24,6 +25,7 @@ declare const fullApi: ApiFromModules<{
   messages: typeof messages;
   notification: typeof notification;
   users: typeof users;
+  videoCalls: typeof videoCalls;
 }>;
 
 /**

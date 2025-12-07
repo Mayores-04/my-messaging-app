@@ -63,4 +63,24 @@ export default defineSchema({
     .index("by_conversation", ["conversationId"])
     .index("by_user", ["userEmail"])
     .index("by_conversation_and_user", ["conversationId", "userEmail"]),
+
+  videoCallSignals: defineTable({
+    conversationId: v.id("conversations"),
+    fromEmail: v.string(),
+    toEmail: v.string(),
+    type: v.union(
+      v.literal("offer"),
+      v.literal("answer"),
+      v.literal("candidate"),
+      v.literal("call-request"),
+      v.literal("call-accepted"),
+      v.literal("call-rejected"),
+      v.literal("call-ended")
+    ),
+    signal: v.optional(v.string()), // JSON stringified WebRTC signal data
+    createdAt: v.number(),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_recipient", ["toEmail"])
+    .index("by_conversation_and_recipient", ["conversationId", "toEmail"]),
 });
