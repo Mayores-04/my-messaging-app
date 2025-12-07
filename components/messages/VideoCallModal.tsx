@@ -293,17 +293,23 @@ export default function VideoCallModal({
 
     const newPeer = new SimplePeer({
       initiator,
-      trickle: false, // Disable trickle ICE to improve stability
+      trickle: true, // Re-enable trickle ICE for better connectivity
       stream: localStream,
       config: {
         iceServers: [
+          // Google Public STUN
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
           { urls: "stun:stun2.l.google.com:19302" },
           { urls: "stun:stun3.l.google.com:19302" },
           { urls: "stun:stun4.l.google.com:19302" },
+          // STUN on Port 443 (Bypasses many firewalls)
+          { urls: "stun:stun.nextcloud.com:443" },
+          { urls: "stun:stun.piratenbrandenburg.de:443" },
+          // Other reliable public STUN servers
+          { urls: "stun:stun.voip.blackberry.com:3478" },
+          { urls: "stun:stun.stunprotocol.org:3478" },
           { urls: "stun:global.stun.twilio.com:3478" },
-          { urls: "stun:stun.services.mozilla.com" },
         ],
       },
     });
@@ -457,10 +463,20 @@ export default function VideoCallModal({
     if (!peer || peer.destroyed) return;
 
     const processSignals = async () => {
-      for (const signal of pendingSignals) {
+      // Sort signals to ensure offer/answer are processed before candidates
+      const sortedSignals = [...pendingSignals].sort((a, b) => {
+        const getPriority = (type: string) => {
+          if (type === 'offer') return 0;
+          if (type === 'answer') return 1;
+          if (type === 'candidate') return 2;
+          return 3;
+        };
+        return getPriority(a.type) - getPriority(b.type);
+      });
+
+      for (const signal of sortedSignals) {
         // Skip if already processed
         if (processedSignals.has(signal._id)) {
-          console.log("[VideoCall] Signal already processed:", signal._id);
           continue;
         }
 
