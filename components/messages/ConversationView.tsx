@@ -165,6 +165,44 @@ export default function ConversationView({ conversation, onBack }: any) {
 
   const handleStartVideoCall = async () => {
     try {
+      // Check if browser supports media devices
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Your browser doesn't support video calls. Please use Chrome, Firefox, Edge, or Safari.");
+        return;
+      }
+
+      // Check for HTTPS (except localhost)
+      if (window.location.protocol !== 'https:' && 
+          !window.location.hostname.includes('localhost') && 
+          window.location.hostname !== '127.0.0.1') {
+        alert("Video calls require HTTPS. Please access the site via https://");
+        return;
+      }
+
+      // Pre-check permissions before starting the call
+      try {
+        const testStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true
+        });
+        // Immediately stop the test stream
+        testStream.getTracks().forEach(track => track.stop());
+      } catch (permError: any) {
+        let errorMsg = "Cannot start video call: ";
+        if (permError.name === "NotAllowedError") {
+          errorMsg += "Camera/microphone permission denied. Please click the camera icon in your browser's address bar and allow access.";
+        } else if (permError.name === "NotFoundError") {
+          errorMsg += "No camera or microphone found. Please connect a device.";
+        } else if (permError.name === "NotReadableError") {
+          errorMsg += "Camera/microphone is being used by another application.";
+        } else {
+          errorMsg += permError.message || "Unknown error";
+        }
+        alert(errorMsg);
+        return;
+      }
+
+      // Permissions granted, start the call
       await sendSignal({
         conversationId: conversation._id,
         toEmail: conversation.otherUserEmail,
@@ -179,9 +217,37 @@ export default function ConversationView({ conversation, onBack }: any) {
   };
 
   const handleAcceptCall = async () => {
-    setShowIncomingCall(false);
-    setIsCallInitiator(false);
-    setIsVideoCallActive(true);
+    // Pre-check permissions before accepting
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Your browser doesn't support video calls.");
+        setShowIncomingCall(false);
+        return;
+      }
+
+      const testStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
+      });
+      testStream.getTracks().forEach(track => track.stop());
+      
+      setShowIncomingCall(false);
+      setIsCallInitiator(false);
+      setIsVideoCallActive(true);
+    } catch (permError: any) {
+      let errorMsg = "Cannot accept call: ";
+      if (permError.name === "NotAllowedError") {
+        errorMsg += "Please allow camera/microphone access in your browser settings.";
+      } else if (permError.name === "NotFoundError") {
+        errorMsg += "No camera or microphone found.";
+      } else if (permError.name === "NotReadableError") {
+        errorMsg += "Camera/microphone is being used by another app.";
+      } else {
+        errorMsg += permError.message || "Unknown error";
+      }
+      alert(errorMsg);
+      setShowIncomingCall(false);
+    }
   };
 
   const handleRejectCall = async () => {

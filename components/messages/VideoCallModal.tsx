@@ -47,17 +47,69 @@ export default function VideoCallModal({
   useEffect(() => {
     const initMedia = async () => {
       try {
+        // Check if mediaDevices is supported
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Your browser doesn't support media devices. Please use a modern browser.");
+        }
+
+        // Request with more specific constraints
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: "user"
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
         });
+        
         setLocalStream(stream);
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to get media devices:", error);
-        alert("Failed to access camera/microphone. Please check permissions.");
+        
+        let errorMessage = "Failed to access camera/microphone. ";
+        
+        if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+          errorMessage += "Permission was denied. Please allow camera and microphone access in your browser settings.";
+        } else if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+          errorMessage += "No camera or microphone found. Please connect a device.";
+        } else if (error.name === "NotReadableError" || error.name === "TrackStartError") {
+          errorMessage += "Camera/microphone is already in use by another application.";
+        } else if (error.name === "OverconstrainedError") {
+          errorMessage += "Camera doesn't meet requirements. Trying with basic settings...";
+          
+          // Retry with minimal constraints
+          try {
+            const basicStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: true
+            });
+            setLocalStream(basicStream);
+            if (localVideoRef.current) {
+              localVideoRef.current.srcObject = basicStream;
+            }
+            return; // Success with basic constraints
+          } catch (retryError) {
+            errorMessage = "Failed to access camera/microphone even with basic settings.";
+          }
+        } else if (error.name === "TypeError") {
+          errorMessage += "Browser doesn't support media access. Use Chrome, Firefox, or Edge on HTTPS.";
+        } else {
+          errorMessage += error.message || "Unknown error occurred.";
+        }
+        
+        alert(errorMessage);
+        console.log("Error details:", {
+          name: error.name,
+          message: error.message,
+          constraint: error.constraint
+        });
         onClose();
       }
     };
