@@ -56,8 +56,9 @@ export default function VideoCallModal({
         // Request with more specific constraints
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 30 },
             facingMode: "user"
           },
           audio: {
@@ -67,10 +68,19 @@ export default function VideoCallModal({
           }
         });
         
+        console.log("[VideoCall] Media stream obtained:", {
+          videoTracks: stream.getVideoTracks().map(t => ({
+            label: t.label,
+            settings: t.getSettings(),
+            enabled: t.enabled
+          })),
+          audioTracks: stream.getAudioTracks().map(t => ({
+            label: t.label,
+            enabled: t.enabled
+          }))
+        });
+        
         setLocalStream(stream);
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
         setConnectionState("media-ready");
         console.log("[VideoCall] Media stream initialized successfully");
       } catch (error: any) {
@@ -94,9 +104,6 @@ export default function VideoCallModal({
               audio: true
             });
             setLocalStream(basicStream);
-            if (localVideoRef.current) {
-              localVideoRef.current.srcObject = basicStream;
-            }
             return; // Success with basic constraints
           } catch (retryError) {
             errorMessage = "Failed to access camera/microphone even with basic settings.";
@@ -126,11 +133,47 @@ export default function VideoCallModal({
     };
   }, []);
 
+  // Ensure local video is playing
+  useEffect(() => {
+    if (localStream && localVideoRef.current) {
+      console.log("[VideoCall] Setting local video stream");
+      console.log("[VideoCall] Local stream tracks:", {
+        video: localStream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })),
+        audio: localStream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState }))
+      });
+      localVideoRef.current.srcObject = localStream;
+      // Force play
+      localVideoRef.current.play().catch(err => {
+        console.error("[VideoCall] Error playing local video:", err);
+      });
+    }
+  }, [localStream]);
+
+  // Ensure remote video is playing
+  useEffect(() => {
+    if (remoteStream && remoteVideoRef.current) {
+      console.log("[VideoCall] Setting remote video stream");
+      console.log("[VideoCall] Remote stream tracks:", {
+        video: remoteStream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })),
+        audio: remoteStream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState }))
+      });
+      remoteVideoRef.current.srcObject = remoteStream;
+      // Force play
+      remoteVideoRef.current.play().catch(err => {
+        console.error("[VideoCall] Error playing remote video:", err);
+      });
+    }
+  }, [remoteStream]);
+
   // Initialize peer connection
   useEffect(() => {
     if (!localStream) return;
 
     console.log(`[VideoCall] Initializing peer connection as ${initiator ? 'initiator' : 'receiver'}`);
+    console.log(`[VideoCall] Local stream ready:`, {
+      videoTracks: localStream.getVideoTracks().length,
+      audioTracks: localStream.getAudioTracks().length
+    });
 
     const newPeer = new SimplePeer({
       initiator,
@@ -146,6 +189,14 @@ export default function VideoCallModal({
         ],
       },
     });
+
+    // Set connection timeout
+    const connectionTimeout = setTimeout(() => {
+      if (!remoteStream) {
+        console.log("[VideoCall] Connection timeout - no remote stream received");
+        setCallStatus("Connection timeout");
+      }
+    }, 30000); // 30 seconds timeout
 
     newPeer.on("signal", async (data) => {
       try {
@@ -165,10 +216,8 @@ export default function VideoCallModal({
 
     newPeer.on("stream", (stream) => {
       console.log("[VideoCall] Received remote stream");
+      clearTimeout(connectionTimeout);
       setRemoteStream(stream);
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = stream;
-      }
       setCallStatus("Connected");
       setConnectionState("connected");
     });
@@ -194,6 +243,7 @@ export default function VideoCallModal({
     peerRef.current = newPeer;
 
     return () => {
+      clearTimeout(connectionTimeout);
       if (newPeer && !newPeer.destroyed) {
         console.log("[VideoCall] Cleaning up peer connection");
         newPeer.destroy();
@@ -219,8 +269,10 @@ export default function VideoCallModal({
         try {
           if (signal.type === "call-ended") {
             console.log("[VideoCall] Received call-ended signal");
+            setCallStatus("Call ended by other user");
             await clearSignal({ signalId: signal._id });
-            endCall();
+            // Immediate cleanup
+            setTimeout(() => endCall(), 500);
             return;
           }
 
@@ -334,15 +386,28 @@ export default function VideoCallModal({
 
       {/* Video Grid */}
       <div className="flex-1 relative flex items-center justify-center p-4">
+        {/* Debug Info */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="absolute top-4 left-4 bg-black bg-opacity-75 text-white text-xs p-2 rounded z-10">
+            <div>Local Stream: {localStream ? '✓' : '✗'}</div>
+            <div>Remote Stream: {remoteStream ? '✓' : '✗'}</div>
+            <div>Peer: {peer && !peer.destroyed ? '✓' : '✗'}</div>
+            <div>Connection: {connectionState}</div>
+          </div>
+        )}
+        
         {/* Remote Video (Large) */}
         <div className="relative w-full h-full max-w-6xl max-h-[80vh] bg-[#26211c] rounded-lg overflow-hidden">
           {remoteStream ? (
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-            />
+            <>
+              <video
+                key="remote-video"
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            </>
           ) : (
             <div className="flex items-center justify-center w-full h-full">
               <div className="text-center text-[#b8aa9d]">
@@ -358,11 +423,12 @@ export default function VideoCallModal({
           <div className="absolute bottom-4 right-4 w-48 h-36 bg-[#181411] rounded-lg overflow-hidden shadow-lg border-2 border-[#53473c]">
             {localStream && isVideoEnabled ? (
               <video
+                key="local-video"
                 ref={localVideoRef}
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover -scale-x-100"
               />
             ) : (
               <div className="flex items-center justify-center w-full h-full bg-[#26211c]">
