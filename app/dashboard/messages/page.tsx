@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Image from "next/image";
 import { Send, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function MessagesPage() {
   const storeUser = useMutation(api.users.storeUser);
@@ -199,15 +200,15 @@ function ConversationView({ conversation, onBack }: any) {
   };
 
   return (
-    <div className="flex flex-col h-full w-full">
+    <div className="flex flex-col h-screen w-full">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-[#53473c] bg-[#181411]">
-        <button
+        <Button
           onClick={onBack}
           className="md:hidden text-white hover:text-[#e67919]"
         >
           <ArrowLeft className="w-6 h-6" />
-        </button>
+        </Button>
         <div className="w-10 h-10 rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
           {conversation.otherUserAvatar ? (
             <Image
@@ -249,7 +250,7 @@ function ConversationView({ conversation, onBack }: any) {
                       : "bg-[#26211c] text-white border border-[#53473c]"
                   }`}
                 >
-                  <p className="break-words">{message.body}</p>
+                  <p className="wrap-break-word">{message.body}</p>
                   <span
                     className={`text-xs mt-1 block ${
                       isOwn ? "text-[#211811]" : "text-[#b8aa9d]"
@@ -278,13 +279,13 @@ function ConversationView({ conversation, onBack }: any) {
             className="flex-1 bg-[#211811] text-white placeholder-[#b8aa9d] rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#e67919]"
             disabled={sending}
           />
-          <button
+          <Button
             type="submit"
             disabled={!messageText.trim() || sending}
             className="bg-[#e67919] hover:bg-[#cf6213] disabled:bg-[#53473c] text-white rounded-lg px-4 py-2 transition-colors"
           >
             <Send className="w-5 h-5" />
-          </button>
+          </Button>
         </div>
       </form>
     </div>
