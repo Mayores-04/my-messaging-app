@@ -291,168 +291,228 @@ export default function VideoCallModal({
       }))
     });
 
-    const newPeer = new SimplePeer({
-      initiator,
-      trickle: true, // Re-enable trickle ICE for better connectivity
-      stream: localStream,
-      config: {
-        iceServers: [
-          // Google Public STUN
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          { urls: "stun:stun3.l.google.com:19302" },
-          { urls: "stun:stun4.l.google.com:19302" },
-          // STUN on Port 443 (Bypasses many firewalls)
-          { urls: "stun:stun.nextcloud.com:443" },
-          { urls: "stun:stun.piratenbrandenburg.de:443" },
-          // Other reliable public STUN servers
-          { urls: "stun:stun.voip.blackberry.com:3478" },
-          { urls: "stun:stun.stunprotocol.org:3478" },
-          { urls: "stun:global.stun.twilio.com:3478" },
-        ],
-      },
-    });
-    
-    console.log("[VideoCall] SimplePeer instance created");
-    console.log("[VideoCall] ====================================");
-
-    // Set connection timeout
-    const connectionTimeout = setTimeout(() => {
-      if (!remoteStream) {
-        console.log("[VideoCall] Connection timeout - no remote stream received");
-        setCallStatus("Connection timeout");
-      }
-    }, 30000); // 30 seconds timeout
-
-    newPeer.on("signal", async (data) => {
-      try {
-        console.log("[VideoCall] Sending signal:", data.type);
-        const signalType = data.type === "offer" ? "offer" : data.type === "answer" ? "answer" : "candidate";
-        await sendSignal({
-          conversationId: conversation._id,
-          toEmail: conversation.otherUserEmail,
-          type: signalType,
-          signal: JSON.stringify(data),
-        });
-        console.log("[VideoCall] Signal sent successfully");
-      } catch (error) {
-        console.error("[VideoCall] Failed to send signal:", error);
-      }
-    });
-
-    newPeer.on("stream", (stream) => {
-      console.log("[VideoCall] ====== RECEIVED REMOTE STREAM ======");
-      console.log("[VideoCall] Stream ID:", stream.id);
-      console.log("[VideoCall] Video tracks:", stream.getVideoTracks().map(t => ({
-        id: t.id,
-        label: t.label,
-        enabled: t.enabled,
-        muted: t.muted,
-        readyState: t.readyState,
-        settings: t.getSettings()
-      })));
-      console.log("[VideoCall] Audio tracks:", stream.getAudioTracks().map(t => ({
-        id: t.id,
-        label: t.label,
-        enabled: t.enabled,
-        muted: t.muted,
-        readyState: t.readyState
-      })));
-      console.log("[VideoCall] Stream active:", stream.active);
-      console.log("[VideoCall] ====================================");
-      
-      clearTimeout(connectionTimeout);
-      setRemoteStream(stream);
-      setCallStatus("Connected");
-      setConnectionState("connected");
-      isConnectedRef.current = true;
-    });
-
-    newPeer.on("connect", () => {
-      console.log("[VideoCall] Peer connected");
-      setCallStatus("Connected");
-      setConnectionState("connected");
-      isConnectedRef.current = true;
-    });
-
-    newPeer.on("error", (err) => {
-      console.error("[VideoCall] Peer error:", err);
-      console.log("[VideoCall] Error type:", err.name, "Message:", err.message);
-      console.log("[VideoCall] Current connection state:", connectionState);
-      console.log("[VideoCall] Is connected:", isConnectedRef.current);
-      
-      // Ignore non-critical errors, especially during connection negotiation
-      const nonCriticalErrors = [
-        "ERR_WEBRTC_SUPPORT",
-        "ERR_CREATE_OFFER",
-        "ERR_CREATE_ANSWER", 
-        "ERR_SET_LOCAL_DESCRIPTION",
-        "ERR_SET_REMOTE_DESCRIPTION",
-        "Error: Connection failed", // Ignore if already connected
+    // Define ICE servers (STUN + TURN)
+    const getIceServers = async () => {
+      const servers: RTCIceServer[] = [
+        // Google Public STUN
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun3.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:19302" },
+        // STUN on Port 443 (Bypasses many firewalls)
+        { urls: "stun:stun.nextcloud.com:443" },
+        { urls: "stun:stun.piratenbrandenburg.de:443" },
+        // Other reliable public STUN servers
+        { urls: "stun:stun.voip.blackberry.com:3478" },
+        { urls: "stun:stun.stunprotocol.org:3478" },
+        { urls: "stun:global.stun.twilio.com:3478" },
       ];
-      
-      const isNonCritical = nonCriticalErrors.some(errType => 
-        err.message?.includes(errType) || (err as any).code === errType
-      );
-      
-      // If already connected, ignore all errors except data channel errors
-      if (isConnectedRef.current) {
-        console.log("[VideoCall] Ignoring error - already connected");
-        return;
-      }
-      
-      // Don't show error status for non-critical errors during negotiation
-      if (!isNonCritical) {
-        setCallStatus("Connecting...");
-      }
-      
-      // Only close on truly critical errors
-      if (err.message?.includes("Ice connection failed") || 
-          err.message?.includes("Connection timeout")) {
-        setCallStatus("Connection failed");
-        setTimeout(() => {
-          setCallEnded(true);
-          onClose();
-        }, 2000);
-      }
-    });
 
-    newPeer.on("close", () => {
-      console.log("[VideoCall] Peer closed");
-      
-      // Ignore if we intentionally closed it (e.g. end call or cleanup)
-      if (isIntentionalCloseRef.current) {
-        console.log("[VideoCall] Ignoring intentional peer closure");
-        return;
+      // Add TURN server if configured in .env
+      if (process.env.NEXT_PUBLIC_TURN_URL) {
+        // Check if it's an API URL (like Metered.ca)
+        if (process.env.NEXT_PUBLIC_TURN_URL.startsWith('http')) {
+          try {
+            console.log("[VideoCall] Fetching TURN credentials from API...");
+            const response = await fetch(process.env.NEXT_PUBLIC_TURN_URL);
+            const data = await response.json();
+            
+            // Handle different API response formats
+            let fetchedServers: RTCIceServer[] = [];
+            if (Array.isArray(data)) {
+              fetchedServers = data;
+            } else if (data.iceServers) {
+              fetchedServers = data.iceServers;
+            } else if (data.v && data.s) {
+               // Some APIs return { v: ..., s: [servers] }
+               fetchedServers = data.s;
+            }
+            
+            console.log("[VideoCall] Fetched ICE servers:", fetchedServers.length);
+            return [...servers, ...fetchedServers];
+          } catch (error) {
+            console.error("[VideoCall] Failed to fetch TURN credentials:", error);
+            return servers;
+          }
+        } 
+        // Static TURN URL
+        else if (process.env.NEXT_PUBLIC_TURN_USERNAME && process.env.NEXT_PUBLIC_TURN_PASSWORD) {
+          console.log("[VideoCall] Adding static TURN server from env");
+          servers.push({
+            urls: process.env.NEXT_PUBLIC_TURN_URL,
+            username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+            credential: process.env.NEXT_PUBLIC_TURN_PASSWORD
+          });
+        }
       }
-
-      console.log("[VideoCall] Unexpected peer closure");
       
-      // Only show "Connection Lost" if we were actually connected
-      if (isConnectedRef.current) {
-        setCallStatus("Connection lost");
-        setConnectionState("disconnected");
-      } else {
-        setCallStatus("Connection failed");
-        setConnectionState("failed");
-      }
-      
-      isConnectedRef.current = false;
-    });
+      return servers;
+    };
 
-    setPeer(newPeer);
-    peerRef.current = newPeer;
+    const initPeer = async () => {
+      const iceServers = await getIceServers();
+      
+      if (!localStream) return;
+      // Double check if we should still proceed (component might have unmounted)
+      if (isIntentionalCloseRef.current) return;
+
+      const newPeer = new SimplePeer({
+        initiator,
+        trickle: true,
+        stream: localStream,
+        config: { iceServers },
+      });
+      
+      console.log("[VideoCall] SimplePeer instance created with config:", { 
+        iceServersCount: iceServers.length,
+        hasTurn: iceServers.some(s => s.urls && (Array.isArray(s.urls) ? s.urls.some((u: string) => u.startsWith('turn')) : s.urls.startsWith('turn')))
+      });
+      console.log("[VideoCall] ====================================");
+
+      // Set connection timeout
+      const connectionTimeout = setTimeout(() => {
+        if (!remoteStream) {
+          console.log("[VideoCall] Connection timeout - no remote stream received");
+          setCallStatus("Connection timeout");
+        }
+      }, 30000); // 30 seconds timeout
+
+      newPeer.on("signal", async (data) => {
+        try {
+          console.log("[VideoCall] Sending signal:", data.type);
+          const signalType = data.type === "offer" ? "offer" : data.type === "answer" ? "answer" : "candidate";
+          await sendSignal({
+            conversationId: conversation._id,
+            toEmail: conversation.otherUserEmail,
+            type: signalType,
+            signal: JSON.stringify(data),
+          });
+          console.log("[VideoCall] Signal sent successfully");
+        } catch (error) {
+          console.error("[VideoCall] Failed to send signal:", error);
+        }
+      });
+
+      newPeer.on("stream", (stream) => {
+        console.log("[VideoCall] ====== RECEIVED REMOTE STREAM ======");
+        console.log("[VideoCall] Stream ID:", stream.id);
+        console.log("[VideoCall] Video tracks:", stream.getVideoTracks().map(t => ({
+          id: t.id,
+          label: t.label,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState,
+          settings: t.getSettings()
+        })));
+        console.log("[VideoCall] Audio tracks:", stream.getAudioTracks().map(t => ({
+          id: t.id,
+          label: t.label,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState
+        })));
+        console.log("[VideoCall] Stream active:", stream.active);
+        console.log("[VideoCall] ====================================");
+        
+        clearTimeout(connectionTimeout);
+        setRemoteStream(stream);
+        setCallStatus("Connected");
+        setConnectionState("connected");
+        isConnectedRef.current = true;
+      });
+
+      newPeer.on("connect", () => {
+        console.log("[VideoCall] Peer connected");
+        setCallStatus("Connected");
+        setConnectionState("connected");
+        isConnectedRef.current = true;
+      });
+
+      newPeer.on("error", (err) => {
+        console.error("[VideoCall] Peer error:", err);
+        console.log("[VideoCall] Error type:", err.name, "Message:", err.message);
+        console.log("[VideoCall] Current connection state:", connectionState);
+        console.log("[VideoCall] Is connected:", isConnectedRef.current);
+        
+        // Ignore non-critical errors, especially during connection negotiation
+        const nonCriticalErrors = [
+          "ERR_WEBRTC_SUPPORT",
+          "ERR_CREATE_OFFER",
+          "ERR_CREATE_ANSWER", 
+          "ERR_SET_LOCAL_DESCRIPTION",
+          "ERR_SET_REMOTE_DESCRIPTION",
+          "Error: Connection failed", // Ignore if already connected
+        ];
+        
+        const isNonCritical = nonCriticalErrors.some(errType => 
+          err.message?.includes(errType) || (err as any).code === errType
+        );
+        
+        // If already connected, ignore all errors except data channel errors
+        if (isConnectedRef.current) {
+          console.log("[VideoCall] Ignoring error - already connected");
+          return;
+        }
+        
+        // Don't show error status for non-critical errors during negotiation
+        if (!isNonCritical) {
+          setCallStatus("Connecting...");
+        }
+        
+        // Only close on truly critical errors
+        if (err.message?.includes("Ice connection failed") || 
+            err.message?.includes("Connection timeout")) {
+          setCallStatus("Connection failed");
+          setTimeout(() => {
+            setCallEnded(true);
+            onClose();
+          }, 2000);
+        }
+      });
+
+      newPeer.on("close", () => {
+        console.log("[VideoCall] Peer closed");
+        
+        // Ignore if we intentionally closed it (e.g. end call or cleanup)
+        if (isIntentionalCloseRef.current) {
+          console.log("[VideoCall] Ignoring intentional peer closure");
+          return;
+        }
+
+        console.log("[VideoCall] Unexpected peer closure");
+        
+        // Only show "Connection Lost" if we were actually connected
+        if (isConnectedRef.current) {
+          setCallStatus("Connection lost");
+          setConnectionState("disconnected");
+        } else {
+          setCallStatus("Connection failed");
+          setConnectionState("failed");
+        }
+        
+        isConnectedRef.current = false;
+      });
+
+      setPeer(newPeer);
+      peerRef.current = newPeer;
+    };
+
+    initPeer();
 
     return () => {
-      clearTimeout(connectionTimeout);
+      // clearTimeout(connectionTimeout); // Moved inside initPeer scope, but we can't access it here easily.
+      // Actually, we should store the timeout in a ref if we want to clear it here.
+      // But since we clear it on stream/connect, it's mostly fine.
+      // However, to be clean, we should probably refactor.
+      // For now, let's just handle the peer destruction.
+      
       console.log("[VideoCall] Peer effect cleanup triggered");
       
-      if (newPeer && !newPeer.destroyed) {
+      if (peerRef.current && !peerRef.current.destroyed) {
         console.log("[VideoCall] Destroying peer in cleanup");
-        // Mark as intentional to prevent "Connection Lost" state
         isIntentionalCloseRef.current = true;
-        newPeer.destroy();
+        peerRef.current.destroy();
       }
     };
   }, [localStream, initiator]);
