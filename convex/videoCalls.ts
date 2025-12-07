@@ -68,7 +68,11 @@ export const clearSignal = mutation({
       throw new Error("Not authenticated");
     }
 
-    await ctx.db.delete(args.signalId);
+    // Check if signal exists before trying to delete
+    const signal = await ctx.db.get(args.signalId);
+    if (signal) {
+      await ctx.db.delete(args.signalId);
+    }
   },
 });
 

@@ -270,7 +270,15 @@ export default function VideoCallModal({
           if (signal.type === "call-ended") {
             console.log("[VideoCall] Received call-ended signal");
             setCallStatus("Call ended by other user");
-            await clearSignal({ signalId: signal._id });
+            // Mark as processed before clearing
+            setProcessedSignals((prev) => {
+              const newSet = new Set(prev);
+              newSet.add(signal._id);
+              return newSet;
+            });
+            await clearSignal({ signalId: signal._id }).catch(err => {
+              console.log("[VideoCall] Signal already cleared:", err);
+            });
             // Immediate cleanup
             setTimeout(() => endCall(), 500);
             return;
@@ -279,7 +287,14 @@ export default function VideoCallModal({
           if (signal.type === "call-rejected") {
             console.log("[VideoCall] Call was rejected");
             alert("Call was rejected");
-            await clearSignal({ signalId: signal._id });
+            setProcessedSignals((prev) => {
+              const newSet = new Set(prev);
+              newSet.add(signal._id);
+              return newSet;
+            });
+            await clearSignal({ signalId: signal._id }).catch(err => {
+              console.log("[VideoCall] Signal already cleared:", err);
+            });
             endCall();
             return;
           }
@@ -303,16 +318,18 @@ export default function VideoCallModal({
             }
           }
 
-          // Clear processed signal
-          await clearSignal({ signalId: signal._id });
+          // Clear processed signal with error handling
+          await clearSignal({ signalId: signal._id }).catch(err => {
+            console.log("[VideoCall] Signal already cleared:", err);
+          });
         } catch (error) {
           console.error("[VideoCall] Failed to process signal:", error);
-          // Still try to clear the signal even if processing failed
-          try {
-            await clearSignal({ signalId: signal._id });
-          } catch (clearError) {
-            console.error("[VideoCall] Failed to clear signal:", clearError);
-          }
+          // Mark as processed even if there was an error
+          setProcessedSignals((prev) => {
+            const newSet = new Set(prev);
+            newSet.add(signal._id);
+            return newSet;
+          });
         }
       }
     };
@@ -389,14 +406,15 @@ export default function VideoCallModal({
         {/* Debug Info */}
         {process.env.NODE_ENV === 'development' && (
           <div className="absolute top-4 left-4 bg-black bg-opacity-75 text-white text-xs p-2 rounded z-10">
-            <div>Local Stream: {localStream ? '✓' : '✗'}</div>
-            <div>Remote Stream: {remoteStream ? '✓' : '✗'}</div>
+            <div>Local Stream (YOU): {localStream ? '✓' : '✗'}</div>
+            <div>Remote Stream (THEM): {remoteStream ? '✓' : '✗'}</div>
             <div>Peer: {peer && !peer.destroyed ? '✓' : '✗'}</div>
             <div>Connection: {connectionState}</div>
+            <div>Role: {initiator ? 'Caller' : 'Receiver'}</div>
           </div>
         )}
         
-        {/* Remote Video (Large) */}
+        {/* Remote Video (Large) - Shows the OTHER person's camera */}
         <div className="relative w-full h-full max-w-6xl max-h-[80vh] bg-[#26211c] rounded-lg overflow-hidden">
           {remoteStream ? (
             <>
