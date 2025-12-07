@@ -161,23 +161,67 @@ export default function VideoCallModal({
   // Ensure remote video is playing
   useEffect(() => {
     if (remoteStream && remoteVideoRef.current) {
-      console.log("[VideoCall] Setting remote video stream");
+      console.log("[VideoCall] ====== SETTING UP REMOTE VIDEO ======");
       console.log("[VideoCall] Remote stream tracks:", {
-        video: remoteStream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })),
-        audio: remoteStream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState }))
+        video: remoteStream.getVideoTracks().map(t => ({ 
+          id: t.id, 
+          enabled: t.enabled, 
+          readyState: t.readyState,
+          muted: t.muted,
+          settings: t.getSettings()
+        })),
+        audio: remoteStream.getAudioTracks().map(t => ({ 
+          id: t.id, 
+          enabled: t.enabled, 
+          readyState: t.readyState 
+        }))
       });
-      console.log("[VideoCall] Remote video element:", {
+      console.log("[VideoCall] Remote video element before setup:", {
         exists: !!remoteVideoRef.current,
         readyState: remoteVideoRef.current.readyState,
-        paused: remoteVideoRef.current.paused
+        paused: remoteVideoRef.current.paused,
+        currentSrc: remoteVideoRef.current.currentSrc,
+        videoWidth: remoteVideoRef.current.videoWidth,
+        videoHeight: remoteVideoRef.current.videoHeight
       });
+      
       remoteVideoRef.current.srcObject = remoteStream;
+      
+      // Add event listeners to debug video loading
+      remoteVideoRef.current.onloadedmetadata = () => {
+        console.log("[VideoCall] Remote video metadata loaded:", {
+          videoWidth: remoteVideoRef.current?.videoWidth,
+          videoHeight: remoteVideoRef.current?.videoHeight,
+          duration: remoteVideoRef.current?.duration
+        });
+      };
+      
+      remoteVideoRef.current.onloadeddata = () => {
+        console.log("[VideoCall] Remote video data loaded");
+      };
+      
+      remoteVideoRef.current.onplay = () => {
+        console.log("[VideoCall] Remote video started playing");
+      };
+      
+      remoteVideoRef.current.onerror = (e) => {
+        console.error("[VideoCall] Remote video error:", e);
+      };
+      
       // Force play
       remoteVideoRef.current.play().then(() => {
-        console.log("[VideoCall] Remote video playing successfully");
+        console.log("[VideoCall] Remote video play() succeeded");
+        console.log("[VideoCall] Remote video element after play:", {
+          readyState: remoteVideoRef.current?.readyState,
+          paused: remoteVideoRef.current?.paused,
+          videoWidth: remoteVideoRef.current?.videoWidth,
+          videoHeight: remoteVideoRef.current?.videoHeight
+        });
       }).catch(err => {
-        console.error("[VideoCall] Error playing remote video:", err);
+        console.error("[VideoCall] Remote video play() failed:", err);
       });
+      
+      console.log("[VideoCall] ====================================");
     }
   }, [remoteStream]);
 
@@ -185,10 +229,27 @@ export default function VideoCallModal({
   useEffect(() => {
     if (!localStream) return;
 
-    console.log(`[VideoCall] Initializing peer connection as ${initiator ? 'initiator' : 'receiver'}`);
-    console.log(`[VideoCall] Local stream ready:`, {
+    console.log(`[VideoCall] ====== INITIALIZING PEER CONNECTION ======`);
+    console.log(`[VideoCall] Role: ${initiator ? 'INITIATOR (Caller)' : 'RECEIVER (Answerer)'}`);
+    console.log(`[VideoCall] Local stream details:`, {
+      streamId: localStream.id,
+      active: localStream.active,
       videoTracks: localStream.getVideoTracks().length,
-      audioTracks: localStream.getAudioTracks().length
+      audioTracks: localStream.getAudioTracks().length,
+      videoTrackDetails: localStream.getVideoTracks().map(t => ({
+        id: t.id,
+        label: t.label,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState,
+        settings: t.getSettings()
+      })),
+      audioTrackDetails: localStream.getAudioTracks().map(t => ({
+        id: t.id,
+        label: t.label,
+        enabled: t.enabled,
+        readyState: t.readyState
+      }))
     });
 
     const newPeer = new SimplePeer({
@@ -205,6 +266,9 @@ export default function VideoCallModal({
         ],
       },
     });
+    
+    console.log("[VideoCall] SimplePeer instance created");
+    console.log("[VideoCall] ====================================");
 
     // Set connection timeout
     const connectionTimeout = setTimeout(() => {
@@ -231,7 +295,26 @@ export default function VideoCallModal({
     });
 
     newPeer.on("stream", (stream) => {
-      console.log("[VideoCall] Received remote stream");
+      console.log("[VideoCall] ====== RECEIVED REMOTE STREAM ======");
+      console.log("[VideoCall] Stream ID:", stream.id);
+      console.log("[VideoCall] Video tracks:", stream.getVideoTracks().map(t => ({
+        id: t.id,
+        label: t.label,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState,
+        settings: t.getSettings()
+      })));
+      console.log("[VideoCall] Audio tracks:", stream.getAudioTracks().map(t => ({
+        id: t.id,
+        label: t.label,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState
+      })));
+      console.log("[VideoCall] Stream active:", stream.active);
+      console.log("[VideoCall] ====================================");
+      
       clearTimeout(connectionTimeout);
       setRemoteStream(stream);
       setCallStatus("Connected");
