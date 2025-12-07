@@ -168,12 +168,20 @@ export default function ConversationView({ conversation, onBack }: any) {
 
   const handleStartVideoCall = async () => {
     try {
+      console.log("[ConversationView] Starting video call check...");
+      console.log("[ConversationView] Protocol:", window.location.protocol);
+      console.log("[ConversationView] Hostname:", window.location.hostname);
+      console.log("[ConversationView] Full URL:", window.location.href);
+      console.log("[ConversationView] Navigator exists:", typeof navigator !== 'undefined');
+      console.log("[ConversationView] MediaDevices exists:", !!navigator?.mediaDevices);
+      console.log("[ConversationView] getUserMedia exists:", !!navigator?.mediaDevices?.getUserMedia);
+      
       // Check for HTTPS (except localhost) - more important than browser check
       if (typeof window !== 'undefined' && 
           window.location.protocol !== 'https:' && 
           !window.location.hostname.includes('localhost') && 
           window.location.hostname !== '127.0.0.1') {
-        alert("Video calls require HTTPS. Please access the site via https://");
+        alert("⚠️ Video calls require HTTPS.\n\nPlease use:\nhttps://jm-messaging-app.vercel.app\n\nNot:\nhttp://jm-messaging-app.vercel.app");
         return;
       }
 
@@ -181,7 +189,12 @@ export default function ConversationView({ conversation, onBack }: any) {
       if (typeof navigator === 'undefined' || 
           !navigator.mediaDevices || 
           !navigator.mediaDevices.getUserMedia) {
-        alert("Your browser doesn't support video calls. Please update your browser or use Chrome/Safari.");
+        console.error("[ConversationView] Media devices not supported:", {
+          navigator: typeof navigator,
+          mediaDevices: !!navigator?.mediaDevices,
+          getUserMedia: !!navigator?.mediaDevices?.getUserMedia
+        });
+        alert("Your browser doesn't support video calls. Please use:\n- Chrome/Safari on iOS\n- Chrome on Android\n- Make sure you're using HTTPS");
         return;
       }
 
