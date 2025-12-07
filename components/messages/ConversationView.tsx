@@ -263,12 +263,31 @@ export default function ConversationView({ conversation, onBack }: any) {
     try {
       console.log("[ConversationView] Accepting call, checking permissions...");
       
-      const testStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" },
-        audio: true
-      });
-      testStream.getTracks().forEach(track => track.stop());
-      console.log("[ConversationView] Permission granted, accepting call");
+      // Support for legacy APIs (allow any browser implementation)
+      const getUserMedia = 
+        (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices)) ||
+        (typeof navigator !== 'undefined' && (navigator as any).getUserMedia?.bind(navigator)) ||
+        (typeof navigator !== 'undefined' && (navigator as any).webkitGetUserMedia?.bind(navigator)) ||
+        (typeof navigator !== 'undefined' && (navigator as any).mozGetUserMedia?.bind(navigator));
+
+      if (getUserMedia) {
+        try {
+            const testStream = await new Promise<MediaStream>((resolve, reject) => {
+                const constraints = { video: { facingMode: "user" }, audio: true };
+                if (navigator.mediaDevices?.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia(constraints).then(resolve).catch(reject);
+                } else {
+                    (getUserMedia as any)(constraints, resolve, reject);
+                }
+            });
+            testStream.getTracks().forEach(track => track.stop());
+            console.log("[ConversationView] Permission granted, accepting call");
+        } catch (e) {
+            console.warn("Permission check failed, but proceeding as requested:", e);
+        }
+      } else {
+         console.warn("No getUserMedia found, proceeding as requested");
+      }
       
       // Clear call-request signals before accepting
       if (pendingSignals) {
@@ -291,20 +310,8 @@ export default function ConversationView({ conversation, onBack }: any) {
       setIsCallInitiator(false);
       setIsVideoCallActive(true);
     } catch (permError: any) {
-      let errorMsg = "Cannot accept call: ";
-      if (permError.name === "NotAllowedError" || permError.name === "PermissionDeniedError") {
-        errorMsg += "Please allow camera/microphone access when prompted.";
-      } else if (permError.name === "NotFoundError" || permError.name === "DevicesNotFoundError") {
-        errorMsg += "No camera or microphone found on your device.";
-      } else if (permError.name === "NotReadableError" || permError.name === "TrackStartError") {
-        errorMsg += "Camera/microphone is being used by another app.";
-      } else if (permError.name === "NotSupportedError") {
-        errorMsg += "Camera access not supported on this device.";
-      } else if (permError.name === "SecurityError") {
-        errorMsg += "Camera access blocked for security reasons.";
-      } else {
-        errorMsg += permError.message || "Unknown error";
-      }
+      console.error("Accept call error:", permError);
+      let errorMsg = "Cannot accept call: " + (permError.message || "Unknown error");
       alert(errorMsg);
       setShowIncomingCall(false);
     }

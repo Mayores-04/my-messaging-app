@@ -293,7 +293,7 @@ export default function VideoCallModal({
 
     const newPeer = new SimplePeer({
       initiator,
-      trickle: true,
+      trickle: false, // Disable trickle ICE to improve stability
       stream: localStream,
       config: {
         iceServers: [
@@ -422,8 +422,16 @@ export default function VideoCallModal({
       }
 
       console.log("[VideoCall] Unexpected peer closure");
-      setCallStatus("Connection lost");
-      setConnectionState("disconnected");
+      
+      // Only show "Connection Lost" if we were actually connected
+      if (isConnectedRef.current) {
+        setCallStatus("Connection lost");
+        setConnectionState("disconnected");
+      } else {
+        setCallStatus("Connection failed");
+        setConnectionState("failed");
+      }
+      
       isConnectedRef.current = false;
     });
 
@@ -597,6 +605,9 @@ export default function VideoCallModal({
           )}
           {connectionState === "disconnected" && (
             <span className="text-xs text-red-500">(✗ Connection Lost)</span>
+          )}
+          {connectionState === "failed" && (
+            <span className="text-xs text-red-500">(✗ Connection Failed)</span>
           )}
         </div>
       </div>
