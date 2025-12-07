@@ -107,3 +107,48 @@ export const storeUser = mutation({
         }
     },
 })
+
+// Get user online status by email
+export const getUserOnlineStatus = query({
+    args: {
+        userEmail: v.string(),
+    },
+    handler: async (ctx, args) => {
+        const user = await ctx.db
+            .query('users')
+            .filter((q) => q.eq(q.field('email'), args.userEmail))
+            .first()
+
+        if (!user) {
+            return { isOnline: false }
+        }
+
+        // Check if user is online (active within last 5 minutes)
+        const isOnline = user.lastActive ? (Date.now() - user.lastActive) < 5 * 60 * 1000 : false
+        
+        return { isOnline }
+    },
+})
+
+// Set user as offline (call when signing out)
+export const setUserOffline = mutation({
+    args: {},
+    handler: async (ctx) => {
+        const identity = await ctx.auth.getUserIdentity()
+        if (identity === null) {
+            return // User already signed out
+        }
+
+        // Find user and set lastActive to 0 to mark as offline
+        const existingUser = await ctx.db
+            .query('users')
+            .filter((q) => q.eq(q.field('email'), identity.email))
+            .first()
+
+        if (existingUser) {
+            await ctx.db.patch(existingUser._id, {
+                lastActive: 0,
+            })
+        }
+    },
+})

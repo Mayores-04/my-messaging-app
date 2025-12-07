@@ -14,6 +14,9 @@ export default function ConversationView({ conversation, onBack }: any) {
     conversationId: conversation._id,
     otherUserEmail: conversation.otherUserEmail,
   });
+  const userStatus = useQuery(api.users.getUserOnlineStatus, {
+    userEmail: conversation.otherUserEmail,
+  });
   const sendMessage = useMutation(api.messages.sendMessage);
   const setTypingStatus = useMutation(api.messages.setTyping);
   const markAsRead = useMutation(api.messages.markConversationAsRead);
@@ -117,7 +120,7 @@ export default function ConversationView({ conversation, onBack }: any) {
         <div>
           <h2 className="text-white font-semibold">{conversation.otherUserName}</h2>
           <p className="text-[#b8aa9d] text-xs">
-            {isTyping ? "typing..." : "Active now"}
+            {isTyping ? "typing..." : userStatus?.isOnline ? "Active now" : "Offline"}
           </p>
         </div>
       </div>

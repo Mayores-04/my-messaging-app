@@ -5,9 +5,13 @@ import { SignIn } from "@clerk/nextjs";
 import { Authenticated, Unauthenticated } from "convex/react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useUserPresence } from "@/hooks/useUserPresence";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // Track user presence and handle offline status
+  useUserPresence();
 
   return (
     <div className="flex min-h-screen bg-[#211811] w-full">

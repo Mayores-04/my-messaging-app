@@ -8,6 +8,10 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
   const friends = useQuery(api.friends.getFriendsForCurrentUser);
   const getOrCreateConversation = useMutation(api.messages.getOrCreateConversation);
 
+  // Debug: Log conversations to see online status
+  console.log("Conversations with online status:", conversations);
+  console.log("Friends with online status:", friends);
+
   const handleSelectFriend = async (friend: any) => {
     try {
       const conversationId = await getOrCreateConversation({ 
@@ -73,10 +77,9 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
                   <span className="text-sm">{conv.otherUserName[0]}</span>
                 )}
               </div>
-              {conv.unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center bg-[#e67919] text-white rounded-full w-5 h-5 text-xs font-bold border-2 border-[#181411]">
-                  {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
-                </span>
+              {/* Online indicator - green dot when user is active */}
+              {conv.isOnline && (
+                <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-[#181411]"></span>
               )}
             </div>
 
@@ -85,9 +88,16 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
                 <p className={`font-medium text-sm truncate ${conv.unreadCount > 0 ? 'text-white font-bold' : 'text-white'}`}>
                   {conv.otherUserName}
                 </p>
-                <span className="text-xs text-[#b8aa9d]">
-                  {new Date(conv.lastMessageAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                </span>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs text-[#b8aa9d]">
+                    {new Date(conv.lastMessageAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </span>
+                  {conv.unreadCount > 0 && (
+                    <span className="inline-flex items-center justify-center bg-[#e67919] text-white rounded-full w-5 h-5 text-xs font-bold mt-1">
+                      {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center justify-between">
                 <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'text-white font-semibold' : 'text-[#b8aa9d]'}`}>
@@ -107,18 +117,24 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
             onClick={() => handleSelectFriend(friend)}
             className="flex items-center gap-3 p-3 bg-[#211811] rounded-lg hover:bg-[#2d2520] cursor-pointer transition-colors border border-[#53473c]"
           >
-            <div className="w-12 h-12 rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
-              {friend.avatarUrl ? (
-                <Image
-                  src={friend.avatarUrl}
-                  alt={friend.fullName ?? "user"}
-                  width={48}
-                  height={48}
-                />
-              ) : (
-                <span className="text-sm">
-                  {(friend.firstName || friend.fullName || "?")[0]}
-                </span>
+            <div className="relative w-12 h-12">
+              <div className="w-12 h-12 rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
+                {friend.avatarUrl ? (
+                  <Image
+                    src={friend.avatarUrl}
+                    alt={friend.fullName ?? "user"}
+                    width={48}
+                    height={48}
+                  />
+                ) : (
+                  <span className="text-sm">
+                    {(friend.firstName || friend.fullName || "?")[0]}
+                  </span>
+                )}
+              </div>
+              {/* Online indicator - green dot when user is active */}
+              {friend.isOnline && (
+                <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-[#181411]"></span>
               )}
             </div>
             <div className="flex-1 min-w-0">
