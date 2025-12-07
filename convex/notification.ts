@@ -21,10 +21,8 @@ export const getNotificationsForCurrentUser = query({
       type: n.type,
       message: n.message,
       senderEmail: n.senderEmail,
-      senderName: n.senderName,
-      senderAvatar: n.senderAvatar,
       read: n.read,
-      createdAt: n.createdAt,
+      createdAt: n._creationTime,
       friendshipId: n.friendshipId ?? null,
     }))
   },

@@ -6,7 +6,7 @@ export const getFriendsForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) {
+    if (identity === null || !identity.email) {
       throw new Error('Not authenticated')
     }
 
@@ -53,7 +53,7 @@ export const sendFriendRequest = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) {
+    if (identity === null || !identity.email) {
       throw new Error('Not authenticated')
     }
 
@@ -99,12 +99,9 @@ export const sendFriendRequest = mutation({
     await ctx.db.insert('notifications', {
       recipientEmail: args.friendEmail,
       senderEmail: identity.email,
-      senderName: identity.name ?? identity.email,
-      senderAvatar: identity.pictureUrl ?? null,
       type: 'friend_request',
       message: `${identity.name ?? identity.email} sent you a friend request`,
       read: false,
-      createdAt: Date.now(),
       friendshipId: requestId,
     })
 
@@ -119,7 +116,7 @@ export const acceptFriendRequest = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) {
+    if (identity === null || !identity.email) {
       throw new Error('Not authenticated')
     }
 
@@ -147,12 +144,9 @@ export const acceptFriendRequest = mutation({
     await ctx.db.insert('notifications', {
       recipientEmail: friendship.user1Email,
       senderEmail: identity.email,
-      senderName: identity.name ?? identity.email,
-      senderAvatar: identity.pictureUrl ?? null,
       type: 'friend_accepted',
       message: `${identity.name ?? identity.email} accepted your friend request`,
       read: false,
-      createdAt: Date.now(),
       friendshipId: args.friendshipId,
     })
 
@@ -167,7 +161,7 @@ export const rejectFriendRequest = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) {
+    if (identity === null || !identity.email) {
       throw new Error('Not authenticated')
     }
 
@@ -193,7 +187,7 @@ export const getPendingRequests = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) {
+    if (identity === null || !identity.email) {
       throw new Error('Not authenticated')
     }
 
@@ -229,7 +223,7 @@ export const getSentRequests = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) {
+    if (identity === null || !identity.email) {
       throw new Error('Not authenticated')
     }
 
@@ -267,7 +261,7 @@ export const removeFriend = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) {
+    if (identity === null || !identity.email) {
       throw new Error('Not authenticated')
     }
 
@@ -306,7 +300,7 @@ export const checkFriendshipStatus = query({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) {
+    if (identity === null || !identity.email) {
       throw new Error('Not authenticated')
     }
 

@@ -90,9 +90,9 @@ export const storeUser = mutation({
 
         const userData = {
             email: identity.email!,
-            fullName: identity.name ?? null,
-            firstName: identity.givenName ?? null,
-            avatarUrl: identity.pictureUrl ?? null,
+            fullName: identity.name ?? undefined,
+            firstName: identity.givenName ?? undefined,
+            avatarUrl: identity.pictureUrl ?? undefined,
             lastActive: Date.now(),
         }
 
@@ -102,11 +102,7 @@ export const storeUser = mutation({
             return existingUser._id
         } else {
             // Create new user
-            const userId = await ctx.db.insert('users', {
-                ...userData,
-                lastMessage: null,
-                unreadCount: 0,
-            })
+            const userId = await ctx.db.insert('users', userData)
             return userId
         }
     },
