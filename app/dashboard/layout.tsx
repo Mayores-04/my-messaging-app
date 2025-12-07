@@ -18,7 +18,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         />
         <main
           className={cn(
-            "flex-1 transition-all duration-300 p-8",
+            "flex-1 transition-all duration-300",
             sidebarOpen ? "ml-64" : "ml-16"
           )}
         >

@@ -16,15 +16,14 @@ export default function MessagesPage() {
   }, [storeUser]);
 
   return (
-    <div className="flex gap-6 max-w-7xl mx-auto w-full">
-      <aside className="w-80">
+    <div className="flex gap-6 max-w-7xl mx-auto w-full ">
+      <aside className="w-100 bg-[#181411] border-[#53473c] border-r-2 p-8 h-screen">
+        <h1 className="text-3xl font-bold text-white mb-6">Messages</h1>
         <AllUsers />
       </aside>
 
       <section className="flex-1">
-        <h1 className="text-3xl font-bold text-white mb-6">Messages</h1>
-
-        <div className="bg-[#26211c] border border-[#53473c] rounded-lg p-6">
+        <div className="rounded-lg p-6">
           {messages === undefined ? (
             <div className="text-[#b8aa9d]">Loading messages...</div>
           ) : messages.length === 0 ? (
@@ -34,7 +33,7 @@ export default function MessagesPage() {
               {messages.map((message: any) => (
                 <div
                   key={message._id}
-                  className="bg-[#211811] border border-[#53473c] rounded-lg p-4"
+                  className="bg-[#181411] border border-[#53473c] rounded-lg p-4"
                 >
                   <p className="text-white">
                     {message.body ?? JSON.stringify(message)}
@@ -69,7 +68,7 @@ function AllUsers() {
   }
 
   return (
-    <div className="w-full bg-[#26211c] border border-[#53473c] rounded-lg p-3">
+    <div className="w-full rounded-lg ">
       <div className="mb-3">
         <input
           placeholder="Search conversations..."

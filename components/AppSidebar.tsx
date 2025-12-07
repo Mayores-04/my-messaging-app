@@ -39,8 +39,8 @@ export function AppSidebar({ isOpen, toggleSidebar }: AppSidebarProps) {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 h-screen bg-[#26211c] border-r border-[#53473c] transition-all duration-300 z-40",
-        isOpen ? "w-64" : "w-16"
+        "fixed left-0 top-0 h-screen bg-[#181411] border-r border-[#53473c] transition-all duration-300 z-40",
+        isOpen ? "w-64" : "w-20"
       )}
     >
       <div className="flex flex-col h-full">
@@ -78,7 +78,7 @@ export function AppSidebar({ isOpen, toggleSidebar }: AppSidebarProps) {
                 )}
                 onClick={() => setActiveSection(section.id)}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
+                <Icon className="w-5 h-5 flex shrink-0" />
                 {isOpen && (
                   <span className="text-sm font-medium">{section.label}</span>
                 )}
@@ -88,14 +88,14 @@ export function AppSidebar({ isOpen, toggleSidebar }: AppSidebarProps) {
         </nav>
 
         {/* User Button at Bottom */}
-        <div className="p-4 border-t border-[#53473c]">
+        <div className="p-6 border-t border-[#53473c]">
           <div className={cn("flex items-center", isOpen ? "gap-3" : "")}>
             <UserButton
               appearance={{
                 elements: {
-                  userButtonAvatarBox: "w-10 h-10",
+                  userButtonAvatarBox: "w-12 h-12",
                   userButtonTrigger: "focus:ring-2 focus:ring-[#e67919]",
-                  userButtonPopoverCard: "bg-[#26211c] border border-[#53473c]",
+                  userButtonPopoverCard: "bg-[#181411] border border-[#53473c]",
                   userButtonPopoverActionButton: "text-white hover:bg-[#3a322e]",
                 },
               }}

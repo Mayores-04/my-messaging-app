@@ -1,7 +1,7 @@
 import { mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 
-// Get all friends for the current user
+// Get all friends for the current user (accepted friendships only)
 export const getFriendsForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
@@ -10,13 +10,16 @@ export const getFriendsForCurrentUser = query({
       throw new Error('Not authenticated')
     }
 
-    // Get all friendships where current user is either user1 or user2
+    // Get all accepted friendships where current user is either user1 or user2
     const friendships = await ctx.db
       .query('friendships')
       .filter((q) =>
-        q.or(
-          q.eq(q.field('user1Email'), identity.email),
-          q.eq(q.field('user2Email'), identity.email)
+        q.and(
+          q.eq(q.field('status'), 'accepted'),
+          q.or(
+            q.eq(q.field('user1Email'), identity.email),
+            q.eq(q.field('user2Email'), identity.email)
+          )
         )
       )
       .collect()
@@ -43,8 +46,8 @@ export const getFriendsForCurrentUser = query({
   },
 })
 
-// Add a friend (creates a friendship between two users)
-export const addFriend = mutation({
+// Send a friend request
+export const sendFriendRequest = mutation({
   args: {
     friendEmail: v.string(),
   },
@@ -56,10 +59,10 @@ export const addFriend = mutation({
 
     // Don't allow friending yourself
     if (args.friendEmail === identity.email) {
-      throw new Error('Cannot add yourself as a friend')
+      throw new Error('Cannot send friend request to yourself')
     }
 
-    // Check if friendship already exists
+    // Check if friendship or request already exists
     const existing = await ctx.db
       .query('friendships')
       .filter((q) =>
@@ -77,17 +80,147 @@ export const addFriend = mutation({
       .first()
 
     if (existing) {
-      throw new Error('Friendship already exists')
+      if (existing.status === 'accepted') {
+        throw new Error('Already friends')
+      } else if (existing.status === 'pending') {
+        throw new Error('Friend request already sent')
+      }
     }
 
-    // Create the friendship
-    await ctx.db.insert('friendships', {
-      user1Email: identity.email,
-      user2Email: args.friendEmail,
+    // Create the friend request
+    const requestId = await ctx.db.insert('friendships', {
+      user1Email: identity.email, // sender
+      user2Email: args.friendEmail, // receiver
+      status: 'pending',
       createdAt: Date.now(),
     })
 
+    // Create notification for the receiver
+    await ctx.db.insert('notifications', {
+      recipientEmail: args.friendEmail,
+      senderEmail: identity.email,
+      senderName: identity.name ?? identity.email,
+      senderAvatar: identity.pictureUrl ?? null,
+      type: 'friend_request',
+      message: `${identity.name ?? identity.email} sent you a friend request`,
+      read: false,
+      createdAt: Date.now(),
+      friendshipId: requestId,
+    })
+
+    return { success: true, requestId }
+  },
+})
+
+// Accept a friend request
+export const acceptFriendRequest = mutation({
+  args: {
+    friendshipId: v.id('friendships'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const friendship = await ctx.db.get(args.friendshipId)
+    if (!friendship) {
+      throw new Error('Friend request not found')
+    }
+
+    // Verify the current user is the receiver
+    if (friendship.user2Email !== identity.email) {
+      throw new Error('Unauthorized to accept this request')
+    }
+
+    if (friendship.status !== 'pending') {
+      throw new Error('Friend request is not pending')
+    }
+
+    // Update status to accepted
+    await ctx.db.patch(args.friendshipId, {
+      status: 'accepted',
+      acceptedAt: Date.now(),
+    })
+
+    // Create notification for the sender
+    await ctx.db.insert('notifications', {
+      recipientEmail: friendship.user1Email,
+      senderEmail: identity.email,
+      senderName: identity.name ?? identity.email,
+      senderAvatar: identity.pictureUrl ?? null,
+      type: 'friend_accepted',
+      message: `${identity.name ?? identity.email} accepted your friend request`,
+      read: false,
+      createdAt: Date.now(),
+      friendshipId: args.friendshipId,
+    })
+
     return { success: true }
+  },
+})
+
+// Reject a friend request
+export const rejectFriendRequest = mutation({
+  args: {
+    friendshipId: v.id('friendships'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const friendship = await ctx.db.get(args.friendshipId)
+    if (!friendship) {
+      throw new Error('Friend request not found')
+    }
+
+    // Verify the current user is the receiver
+    if (friendship.user2Email !== identity.email) {
+      throw new Error('Unauthorized to reject this request')
+    }
+
+    // Delete the friend request
+    await ctx.db.delete(args.friendshipId)
+
+    return { success: true }
+  },
+})
+
+// Get pending friend requests for the current user
+export const getPendingRequests = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    // Get all pending requests where current user is the receiver
+    const requests = await ctx.db
+      .query('friendships')
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('user2Email'), identity.email),
+          q.eq(q.field('status'), 'pending')
+        )
+      )
+      .collect()
+
+    // Get sender info for each request
+    const allUsers = await ctx.db.query('users').collect()
+    
+    return requests.map((req) => {
+      const sender = allUsers.find((u: any) => u.email === req.user1Email)
+      return {
+        _id: req._id,
+        senderEmail: req.user1Email,
+        senderName: sender?.fullName ?? sender?.firstName ?? req.user1Email,
+        senderAvatar: sender?.avatarUrl ?? null,
+        createdAt: req.createdAt,
+      }
+    })
   },
 })
 
@@ -127,5 +260,43 @@ export const removeFriend = mutation({
     await ctx.db.delete(friendship._id)
 
     return { success: true }
+  },
+})
+
+// Check if there's a pending request or existing friendship
+export const checkFriendshipStatus = query({
+  args: {
+    userEmail: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const friendship = await ctx.db
+      .query('friendships')
+      .filter((q) =>
+        q.or(
+          q.and(
+            q.eq(q.field('user1Email'), identity.email),
+            q.eq(q.field('user2Email'), args.userEmail)
+          ),
+          q.and(
+            q.eq(q.field('user1Email'), args.userEmail),
+            q.eq(q.field('user2Email'), identity.email)
+          )
+        )
+      )
+      .first()
+
+    if (!friendship) {
+      return { status: 'none' }
+    }
+
+    return { 
+      status: friendship.status,
+      isSender: friendship.user1Email === identity.email,
+    }
   },
 })

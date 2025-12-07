@@ -23,7 +23,7 @@ export default function Home() {
   }
 
   return (
-    <main className="flex flex-col items-center bg-[#211811]">
+    <main className="flex flex-col items-center bg-[#211811] w-full">
       <Header />
       <div className="w-full max-w-7xl mx-auto px-6 py-16">
         <section className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 items-center text-white py-6">

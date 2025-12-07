@@ -14,9 +14,10 @@ export default function AddFriendsPage() {
     api.users.searchUsers,
     { searchTerm }
   );
-  const addFriend = useMutation(api.friends.addFriend);
+  const sendFriendRequest = useMutation(api.friends.sendFriendRequest);
   const storeUser = useMutation(api.users.storeUser);
   const currentFriends = useQuery(api.friends.getFriendsForCurrentUser);
+  const pendingRequests = useQuery(api.friends.getPendingRequests);
 
   // Store current user in database on mount
   useEffect(() => {
@@ -26,12 +27,13 @@ export default function AddFriendsPage() {
       .catch((err) => console.error("Failed to store user:", err));
   }, [storeUser]);
 
-  const handleAddFriend = async (email: string) => {
+  const handleSendRequest = async (email: string) => {
     try {
-      await addFriend({ friendEmail: email });
+      await sendFriendRequest({ friendEmail: email });
       setAddedFriends(new Set([...addedFriends, email]));
+      alert("Friend request sent!");
     } catch (error: any) {
-      alert(error.message || "Failed to add friend");
+      alert(error.message || "Failed to send friend request");
     }
   };
 
@@ -109,13 +111,21 @@ export default function AddFriendsPage() {
                   <Check className="w-4 h-4" />
                   Friends
                 </button>
+              ) : addedFriends.has(user.email) ? (
+                <button
+                  disabled
+                  className="flex items-center gap-2 px-4 py-2 bg-[#53473c] text-[#b8aa9d] rounded-lg cursor-not-allowed"
+                >
+                  <Check className="w-4 h-4" />
+                  Request Sent
+                </button>
               ) : (
                 <button
-                  onClick={() => handleAddFriend(user.email)}
+                  onClick={() => handleSendRequest(user.email)}
                   className="flex items-center gap-2 px-4 py-2 bg-[#e67919] hover:bg-[#cf6213] text-white rounded-lg transition-colors"
                 >
                   <UserPlus className="w-4 h-4" />
-                  Add Friend
+                  Send Request
                 </button>
               )}
             </div>
