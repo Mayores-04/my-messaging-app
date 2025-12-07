@@ -24,11 +24,12 @@ export default function VideoCallModal({
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [callStatus, setCallStatus] = useState<string>(
-    initiator ? "Calling..." : "Incoming call..."
+    initiator ? "Calling..." : "Waiting for connection..."
   );
   const [processedSignals, setProcessedSignals] = useState<Set<string>>(
     new Set()
   );
+  const [connectionState, setConnectionState] = useState<string>("initializing");
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -70,6 +71,8 @@ export default function VideoCallModal({
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
+        setConnectionState("media-ready");
+        console.log("[VideoCall] Media stream initialized successfully");
       } catch (error: any) {
         console.error("Failed to get media devices:", error);
         
@@ -127,6 +130,8 @@ export default function VideoCallModal({
   useEffect(() => {
     if (!localStream) return;
 
+    console.log(`[VideoCall] Initializing peer connection as ${initiator ? 'initiator' : 'receiver'}`);
+
     const newPeer = new SimplePeer({
       initiator,
       trickle: true,
@@ -135,12 +140,16 @@ export default function VideoCallModal({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          { urls: "stun:stun3.l.google.com:19302" },
+          { urls: "stun:stun4.l.google.com:19302" },
         ],
       },
     });
 
     newPeer.on("signal", async (data) => {
       try {
+        console.log("[VideoCall] Sending signal:", data.type);
         const signalType = data.type === "offer" ? "offer" : data.type === "answer" ? "answer" : "candidate";
         await sendSignal({
           conversationId: conversation._id,
@@ -148,29 +157,35 @@ export default function VideoCallModal({
           type: signalType,
           signal: JSON.stringify(data),
         });
+        console.log("[VideoCall] Signal sent successfully");
       } catch (error) {
-        console.error("Failed to send signal:", error);
+        console.error("[VideoCall] Failed to send signal:", error);
       }
     });
 
     newPeer.on("stream", (stream) => {
+      console.log("[VideoCall] Received remote stream");
       setRemoteStream(stream);
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
       }
       setCallStatus("Connected");
+      setConnectionState("connected");
     });
 
     newPeer.on("connect", () => {
+      console.log("[VideoCall] Peer connected");
       setCallStatus("Connected");
+      setConnectionState("connected");
     });
 
     newPeer.on("error", (err) => {
-      console.error("Peer error:", err);
+      console.error("[VideoCall] Peer error:", err);
       setCallStatus("Connection error");
     });
 
     newPeer.on("close", () => {
+      console.log("[VideoCall] Peer closed");
       setCallStatus("Call ended");
       setTimeout(() => onClose(), 1000);
     });
@@ -179,7 +194,8 @@ export default function VideoCallModal({
     peerRef.current = newPeer;
 
     return () => {
-      if (newPeer) {
+      if (newPeer && !newPeer.destroyed) {
+        console.log("[VideoCall] Cleaning up peer connection");
         newPeer.destroy();
       }
     };
@@ -187,40 +203,70 @@ export default function VideoCallModal({
 
   // Process incoming signals
   useEffect(() => {
-    if (!pendingSignals || !peer) return;
+    if (!pendingSignals || pendingSignals.length === 0) return;
+    if (!peer || peer.destroyed) return;
 
     const processSignals = async () => {
       for (const signal of pendingSignals) {
         // Skip if already processed
-        if (processedSignals.has(signal._id)) continue;
+        if (processedSignals.has(signal._id)) {
+          console.log("[VideoCall] Signal already processed:", signal._id);
+          continue;
+        }
+
+        console.log("[VideoCall] Processing signal:", signal.type, signal._id);
 
         try {
           if (signal.type === "call-ended") {
+            console.log("[VideoCall] Received call-ended signal");
+            await clearSignal({ signalId: signal._id });
+            endCall();
+            return;
+          }
+
+          if (signal.type === "call-rejected") {
+            console.log("[VideoCall] Call was rejected");
+            alert("Call was rejected");
             await clearSignal({ signalId: signal._id });
             endCall();
             return;
           }
 
           if (signal.signal) {
-            const signalData = JSON.parse(signal.signal);
-            
-            // Only process WebRTC signals if peer is ready
-            if (peer && !peer.destroyed) {
-              peer.signal(signalData);
-              setProcessedSignals((prev) => new Set(prev).add(signal._id));
+            try {
+              const signalData = JSON.parse(signal.signal);
+              console.log("[VideoCall] Signaling peer with:", signalData.type || "candidate");
+              
+              // Only process WebRTC signals if peer is ready
+              if (peer && !peer.destroyed) {
+                peer.signal(signalData);
+                setProcessedSignals((prev) => {
+                  const newSet = new Set(prev);
+                  newSet.add(signal._id);
+                  return newSet;
+                });
+              }
+            } catch (parseError) {
+              console.error("[VideoCall] Failed to parse signal data:", parseError);
             }
           }
 
           // Clear processed signal
           await clearSignal({ signalId: signal._id });
         } catch (error) {
-          console.error("Failed to process signal:", error);
+          console.error("[VideoCall] Failed to process signal:", error);
+          // Still try to clear the signal even if processing failed
+          try {
+            await clearSignal({ signalId: signal._id });
+          } catch (clearError) {
+            console.error("[VideoCall] Failed to clear signal:", clearError);
+          }
         }
       }
     };
 
     processSignals();
-  }, [pendingSignals, peer, processedSignals]);
+  }, [pendingSignals, peer]);
 
   const toggleVideo = () => {
     if (localStream) {
@@ -272,7 +318,18 @@ export default function VideoCallModal({
         <h2 className="text-xl font-semibold">
           {conversation.otherUserName}
         </h2>
-        <p className="text-sm text-[#b8aa9d]">{callStatus}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-[#b8aa9d]">{callStatus}</p>
+          {connectionState === "initializing" && (
+            <span className="text-xs text-yellow-500">(Setting up...)</span>
+          )}
+          {connectionState === "media-ready" && (
+            <span className="text-xs text-blue-500">(Connecting...)</span>
+          )}
+          {connectionState === "connected" && (
+            <span className="text-xs text-green-500">(✓ Connected)</span>
+          )}
+        </div>
       </div>
 
       {/* Video Grid */}

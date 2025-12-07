@@ -34,6 +34,7 @@ export default function ConversationView({ conversation, onBack }: any) {
   const setTypingStatus = useMutation(api.messages.setTyping);
   const markAsRead = useMutation(api.messages.markConversationAsRead);
   const sendSignal = useMutation(api.videoCalls.sendSignal);
+  const clearSignal = useMutation(api.videoCalls.clearSignal);
   const pendingSignals = useQuery(api.videoCalls.getPendingSignals, {
     conversationId: conversation._id as Id<"conversations">,
   });
@@ -154,10 +155,12 @@ export default function ConversationView({ conversation, onBack }: any) {
   // Check for incoming call signals
   useEffect(() => {
     if (pendingSignals && pendingSignals.length > 0) {
+      console.log("[ConversationView] Pending signals:", pendingSignals.map(s => s.type));
       const callRequest = pendingSignals.find(
         (signal) => signal.type === "call-request"
       );
       if (callRequest && !isVideoCallActive) {
+        console.log("[ConversationView] Showing incoming call notification");
         setShowIncomingCall(true);
       }
     }
@@ -208,6 +211,7 @@ export default function ConversationView({ conversation, onBack }: any) {
         toEmail: conversation.otherUserEmail,
         type: "call-request",
       });
+      console.log("[ConversationView] Call request sent, opening video call modal");
       setIsCallInitiator(true);
       setIsVideoCallActive(true);
     } catch (error) {
@@ -231,6 +235,23 @@ export default function ConversationView({ conversation, onBack }: any) {
       });
       testStream.getTracks().forEach(track => track.stop());
       
+      // Clear call-request signals before accepting
+      if (pendingSignals) {
+        const callRequestSignals = pendingSignals.filter(s => s.type === "call-request");
+        console.log("[ConversationView] Clearing call-request signals:", callRequestSignals.length);
+        for (const signal of callRequestSignals) {
+          await clearSignal({ signalId: signal._id });
+        }
+      }
+      
+      // Send acceptance signal
+      await sendSignal({
+        conversationId: conversation._id,
+        toEmail: conversation.otherUserEmail,
+        type: "call-accepted",
+      });
+      
+      console.log("[ConversationView] Call accepted, opening video call modal");
       setShowIncomingCall(false);
       setIsCallInitiator(false);
       setIsVideoCallActive(true);
