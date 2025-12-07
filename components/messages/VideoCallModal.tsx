@@ -54,12 +54,12 @@ export default function VideoCallModal({
           throw new Error("Your browser doesn't support media devices. Please use a modern browser.");
         }
 
-        // Request with more specific constraints
+        // Request with mobile-friendly constraints
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { min: 640, ideal: 1280, max: 1920 },
-            height: { min: 480, ideal: 720, max: 1080 },
-            frameRate: { ideal: 30, max: 30 },
+            width: { min: 320, ideal: 1280, max: 1920 },
+            height: { min: 240, ideal: 720, max: 1080 },
+            frameRate: { ideal: 24, max: 30 },
             facingMode: "user"
           },
           audio: {

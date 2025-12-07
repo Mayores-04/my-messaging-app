@@ -168,36 +168,43 @@ export default function ConversationView({ conversation, onBack }: any) {
 
   const handleStartVideoCall = async () => {
     try {
-      // Check if browser supports media devices
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("Your browser doesn't support video calls. Please use Chrome, Firefox, Edge, or Safari.");
-        return;
-      }
-
-      // Check for HTTPS (except localhost)
-      if (window.location.protocol !== 'https:' && 
+      // Check for HTTPS (except localhost) - more important than browser check
+      if (typeof window !== 'undefined' && 
+          window.location.protocol !== 'https:' && 
           !window.location.hostname.includes('localhost') && 
           window.location.hostname !== '127.0.0.1') {
         alert("Video calls require HTTPS. Please access the site via https://");
         return;
       }
 
+      // Check if browser supports media devices (should work on modern mobile browsers)
+      if (typeof navigator === 'undefined' || 
+          !navigator.mediaDevices || 
+          !navigator.mediaDevices.getUserMedia) {
+        alert("Your browser doesn't support video calls. Please update your browser or use Chrome/Safari.");
+        return;
+      }
+
       // Pre-check permissions before starting the call
       try {
         const testStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: { facingMode: "user" },
           audio: true
         });
         // Immediately stop the test stream
         testStream.getTracks().forEach(track => track.stop());
       } catch (permError: any) {
         let errorMsg = "Cannot start video call: ";
-        if (permError.name === "NotAllowedError") {
-          errorMsg += "Camera/microphone permission denied. Please click the camera icon in your browser's address bar and allow access.";
-        } else if (permError.name === "NotFoundError") {
-          errorMsg += "No camera or microphone found. Please connect a device.";
-        } else if (permError.name === "NotReadableError") {
+        if (permError.name === "NotAllowedError" || permError.name === "PermissionDeniedError") {
+          errorMsg += "Camera/microphone permission denied. Please allow access when prompted.";
+        } else if (permError.name === "NotFoundError" || permError.name === "DevicesNotFoundError") {
+          errorMsg += "No camera or microphone found. Please check your device.";
+        } else if (permError.name === "NotReadableError" || permError.name === "TrackStartError") {
           errorMsg += "Camera/microphone is being used by another application.";
+        } else if (permError.name === "NotSupportedError") {
+          errorMsg += "Your browser doesn't support camera access on this device.";
+        } else if (permError.name === "SecurityError") {
+          errorMsg += "Camera access blocked. Make sure you're using HTTPS.";
         } else {
           errorMsg += permError.message || "Unknown error";
         }
@@ -223,14 +230,16 @@ export default function ConversationView({ conversation, onBack }: any) {
   const handleAcceptCall = async () => {
     // Pre-check permissions before accepting
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("Your browser doesn't support video calls.");
+      if (typeof navigator === 'undefined' || 
+          !navigator.mediaDevices || 
+          !navigator.mediaDevices.getUserMedia) {
+        alert("Your browser doesn't support video calls. Please update your browser.");
         setShowIncomingCall(false);
         return;
       }
 
       const testStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: { facingMode: "user" },
         audio: true
       });
       testStream.getTracks().forEach(track => track.stop());
@@ -257,12 +266,16 @@ export default function ConversationView({ conversation, onBack }: any) {
       setIsVideoCallActive(true);
     } catch (permError: any) {
       let errorMsg = "Cannot accept call: ";
-      if (permError.name === "NotAllowedError") {
-        errorMsg += "Please allow camera/microphone access in your browser settings.";
-      } else if (permError.name === "NotFoundError") {
-        errorMsg += "No camera or microphone found.";
-      } else if (permError.name === "NotReadableError") {
+      if (permError.name === "NotAllowedError" || permError.name === "PermissionDeniedError") {
+        errorMsg += "Please allow camera/microphone access when prompted.";
+      } else if (permError.name === "NotFoundError" || permError.name === "DevicesNotFoundError") {
+        errorMsg += "No camera or microphone found on your device.";
+      } else if (permError.name === "NotReadableError" || permError.name === "TrackStartError") {
         errorMsg += "Camera/microphone is being used by another app.";
+      } else if (permError.name === "NotSupportedError") {
+        errorMsg += "Camera access not supported on this device.";
+      } else if (permError.name === "SecurityError") {
+        errorMsg += "Camera access blocked for security reasons.";
       } else {
         errorMsg += permError.message || "Unknown error";
       }
