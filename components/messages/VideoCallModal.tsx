@@ -35,6 +35,7 @@ export default function VideoCallModal({
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerRef = useRef<SimplePeer.Instance | null>(null);
+  const isConnectedRef = useRef(false);
 
   const sendSignal = useMutation(api.videoCalls.sendSignal);
   const clearSignal = useMutation(api.videoCalls.clearSignal);
@@ -142,9 +143,16 @@ export default function VideoCallModal({
         video: localStream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })),
         audio: localStream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState }))
       });
+      console.log("[VideoCall] Local video element:", {
+        exists: !!localVideoRef.current,
+        readyState: localVideoRef.current.readyState,
+        paused: localVideoRef.current.paused
+      });
       localVideoRef.current.srcObject = localStream;
       // Force play
-      localVideoRef.current.play().catch(err => {
+      localVideoRef.current.play().then(() => {
+        console.log("[VideoCall] Local video playing successfully");
+      }).catch(err => {
         console.error("[VideoCall] Error playing local video:", err);
       });
     }
@@ -158,9 +166,16 @@ export default function VideoCallModal({
         video: remoteStream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })),
         audio: remoteStream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState }))
       });
+      console.log("[VideoCall] Remote video element:", {
+        exists: !!remoteVideoRef.current,
+        readyState: remoteVideoRef.current.readyState,
+        paused: remoteVideoRef.current.paused
+      });
       remoteVideoRef.current.srcObject = remoteStream;
       // Force play
-      remoteVideoRef.current.play().catch(err => {
+      remoteVideoRef.current.play().then(() => {
+        console.log("[VideoCall] Remote video playing successfully");
+      }).catch(err => {
         console.error("[VideoCall] Error playing remote video:", err);
       });
     }
@@ -221,19 +236,25 @@ export default function VideoCallModal({
       setRemoteStream(stream);
       setCallStatus("Connected");
       setConnectionState("connected");
+      isConnectedRef.current = true;
     });
 
     newPeer.on("connect", () => {
       console.log("[VideoCall] Peer connected");
       setCallStatus("Connected");
       setConnectionState("connected");
+      isConnectedRef.current = true;
     });
 
     newPeer.on("error", (err) => {
       console.error("[VideoCall] Peer error:", err);
-      setCallStatus("Connection error");
+      // Don't show error if already connected
+      if (!isConnectedRef.current) {
+        setCallStatus("Connecting...");
+      }
       // Only close on critical errors
       if (err.message?.includes("Connection failed") || err.message?.includes("Ice connection failed")) {
+        setCallStatus("Connection failed");
         setTimeout(() => {
           setCallEnded(true);
           onClose();
