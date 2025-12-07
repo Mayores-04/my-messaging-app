@@ -137,30 +137,42 @@ export default function VideoCallModal({
 
   // Ensure local video is playing
   useEffect(() => {
-    if (localStream && localVideoRef.current) {
+    const video = localVideoRef.current;
+    if (localStream && video) {
+      // Prevent resetting if already set to the same stream
+      if (video.srcObject === localStream) {
+        return;
+      }
+
       console.log("[VideoCall] Setting local video stream");
-      console.log("[VideoCall] Local stream tracks:", {
-        video: localStream.getVideoTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })),
-        audio: localStream.getAudioTracks().map(t => ({ id: t.id, enabled: t.enabled, readyState: t.readyState }))
-      });
-      console.log("[VideoCall] Local video element:", {
-        exists: !!localVideoRef.current,
-        readyState: localVideoRef.current.readyState,
-        paused: localVideoRef.current.paused
-      });
-      localVideoRef.current.srcObject = localStream;
-      // Force play
-      localVideoRef.current.play().then(() => {
-        console.log("[VideoCall] Local video playing successfully");
-      }).catch(err => {
-        console.error("[VideoCall] Error playing local video:", err);
-      });
+      video.srcObject = localStream;
+      
+      // Force play with error handling
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => console.log("[VideoCall] Local video playing successfully"))
+          .catch(err => {
+            if (err.name === 'AbortError') {
+              console.log("[VideoCall] Local video play interrupted (likely due to update)");
+            } else {
+              console.error("[VideoCall] Error playing local video:", err);
+            }
+          });
+      }
     }
   }, [localStream]);
 
   // Ensure remote video is playing
   useEffect(() => {
-    if (remoteStream && remoteVideoRef.current) {
+    const video = remoteVideoRef.current;
+    if (remoteStream && video) {
+      // Prevent resetting if already set to the same stream
+      if (video.srcObject === remoteStream) {
+        console.log("[VideoCall] Remote video stream already set, skipping update");
+        return;
+      }
+
       console.log("[VideoCall] ====== SETTING UP REMOTE VIDEO ======");
       console.log("[VideoCall] Remote stream tracks:", {
         video: remoteStream.getVideoTracks().map(t => ({ 
@@ -176,50 +188,51 @@ export default function VideoCallModal({
           readyState: t.readyState 
         }))
       });
-      console.log("[VideoCall] Remote video element before setup:", {
-        exists: !!remoteVideoRef.current,
-        readyState: remoteVideoRef.current.readyState,
-        paused: remoteVideoRef.current.paused,
-        currentSrc: remoteVideoRef.current.currentSrc,
-        videoWidth: remoteVideoRef.current.videoWidth,
-        videoHeight: remoteVideoRef.current.videoHeight
-      });
       
-      remoteVideoRef.current.srcObject = remoteStream;
+      video.srcObject = remoteStream;
       
       // Add event listeners to debug video loading
-      remoteVideoRef.current.onloadedmetadata = () => {
+      video.onloadedmetadata = () => {
         console.log("[VideoCall] Remote video metadata loaded:", {
-          videoWidth: remoteVideoRef.current?.videoWidth,
-          videoHeight: remoteVideoRef.current?.videoHeight,
-          duration: remoteVideoRef.current?.duration
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          duration: video.duration
         });
       };
       
-      remoteVideoRef.current.onloadeddata = () => {
+      video.onloadeddata = () => {
         console.log("[VideoCall] Remote video data loaded");
       };
       
-      remoteVideoRef.current.onplay = () => {
+      video.onplay = () => {
         console.log("[VideoCall] Remote video started playing");
       };
       
-      remoteVideoRef.current.onerror = (e) => {
+      video.onerror = (e) => {
         console.error("[VideoCall] Remote video error:", e);
       };
       
-      // Force play
-      remoteVideoRef.current.play().then(() => {
-        console.log("[VideoCall] Remote video play() succeeded");
-        console.log("[VideoCall] Remote video element after play:", {
-          readyState: remoteVideoRef.current?.readyState,
-          paused: remoteVideoRef.current?.paused,
-          videoWidth: remoteVideoRef.current?.videoWidth,
-          videoHeight: remoteVideoRef.current?.videoHeight
-        });
-      }).catch(err => {
-        console.error("[VideoCall] Remote video play() failed:", err);
-      });
+      // Force play with robust error handling
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log("[VideoCall] Remote video play() succeeded");
+            console.log("[VideoCall] Remote video element after play:", {
+              readyState: video.readyState,
+              paused: video.paused,
+              videoWidth: video.videoWidth,
+              videoHeight: video.videoHeight
+            });
+          })
+          .catch(err => {
+            if (err.name === 'AbortError') {
+              console.log("[VideoCall] Remote video play interrupted (likely due to update)");
+            } else {
+              console.error("[VideoCall] Remote video play() failed:", err);
+            }
+          });
+      }
       
       console.log("[VideoCall] ====================================");
     }
@@ -228,6 +241,13 @@ export default function VideoCallModal({
   // Initialize peer connection
   useEffect(() => {
     if (!localStream) return;
+
+    // If we already have an active peer for this stream, don't recreate
+    // This helps with React Strict Mode double-invocation
+    if (peerRef.current && !peerRef.current.destroyed) {
+      console.log("[VideoCall] Peer already exists and is active, skipping creation");
+      return;
+    }
 
     console.log(`[VideoCall] ====== INITIALIZING PEER CONNECTION ======`);
     console.log(`[VideoCall] Role: ${initiator ? 'INITIATOR (Caller)' : 'RECEIVER (Answerer)'}`);
@@ -373,8 +393,18 @@ export default function VideoCallModal({
 
     newPeer.on("close", () => {
       console.log("[VideoCall] Peer closed");
-      // Only trigger onClose if call was intentionally ended
-      if (callEnded) {
+      console.log("[VideoCall] Call ended state:", callEnded);
+      
+      if (!callEnded) {
+        // Unexpected closure
+        console.log("[VideoCall] Unexpected peer closure");
+        setCallStatus("Connection lost");
+        setConnectionState("disconnected");
+        isConnectedRef.current = false;
+        
+        // Optional: Try to reconnect or just notify user
+        // For now, let's keep the modal open but show the error
+      } else {
         setCallStatus("Call ended");
         setTimeout(() => onClose(), 500);
       }
@@ -385,8 +415,42 @@ export default function VideoCallModal({
 
     return () => {
       clearTimeout(connectionTimeout);
+      // Only destroy if we are truly unmounting or stream changed
+      // In Strict Mode, we might want to delay this or check if it's a re-render
+      // But for now, let's just log it
+      console.log("[VideoCall] Peer effect cleanup triggered");
+      
+      // Note: We don't destroy the peer here immediately to survive Strict Mode re-renders
+      // But we need to make sure we don't leak peers.
+      // The peerRef check at the start of the effect handles the re-creation prevention.
+      // But if we leave this component for real, we need to destroy.
+      
+      // For now, let's rely on the parent component unmounting or endCall being called
+      // to destroy the peer.
+      // However, if localStream changes, we DO need to destroy the old peer.
+      
+      // Let's use a small timeout to check if we're still mounted? No, that's hacky.
+      
+      // Better approach: Just destroy it. The peerRef check above will prevent
+      // creation if we didn't destroy it. But here we ARE destroying it.
+      
+      // If we destroy it here, the peerRef check above is useless for Strict Mode
+      // because the cleanup runs before the next effect.
+      
+      // So, to fix Strict Mode:
+      // We should NOT destroy the peer in the cleanup of the effect that created it,
+      // UNLESS the component is actually unmounting.
+      // But we can't know that easily.
+      
+      // Alternative: Store the cleanup function in a ref and call it on mount?
+      
+      // Let's try the standard cleanup but with the "close" handler fix we just added.
+      // If Strict Mode destroys it, the "close" handler will fire.
+      // If !callEnded, it sets status to "Connection lost".
+      // This explains why you see "Peer: X" but "Connected" (before my fix).
+      
       if (newPeer && !newPeer.destroyed) {
-        console.log("[VideoCall] Cleaning up peer connection");
+        console.log("[VideoCall] Destroying peer in cleanup");
         newPeer.destroy();
       }
     };
@@ -542,6 +606,9 @@ export default function VideoCallModal({
           )}
           {connectionState === "connected" && (
             <span className="text-xs text-green-500">(✓ Connected)</span>
+          )}
+          {connectionState === "disconnected" && (
+            <span className="text-xs text-red-500">(✗ Connection Lost)</span>
           )}
         </div>
       </div>

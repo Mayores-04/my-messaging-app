@@ -172,32 +172,12 @@ export default function ConversationView({ conversation, onBack }: any) {
       console.log("[ConversationView] Protocol:", window.location.protocol);
       console.log("[ConversationView] Hostname:", window.location.hostname);
       console.log("[ConversationView] Full URL:", window.location.href);
+      console.log("[ConversationView] User Agent:", navigator.userAgent);
       console.log("[ConversationView] Navigator exists:", typeof navigator !== 'undefined');
       console.log("[ConversationView] MediaDevices exists:", !!navigator?.mediaDevices);
       console.log("[ConversationView] getUserMedia exists:", !!navigator?.mediaDevices?.getUserMedia);
       
-      // Check for HTTPS (except localhost) - more important than browser check
-      if (typeof window !== 'undefined' && 
-          window.location.protocol !== 'https:' && 
-          !window.location.hostname.includes('localhost') && 
-          window.location.hostname !== '127.0.0.1') {
-        alert("⚠️ Video calls require HTTPS.\n\nPlease use:\nhttps://jm-messaging-app.vercel.app\n\nNot:\nhttp://jm-messaging-app.vercel.app");
-        return;
-      }
-
-      // Check if browser supports media devices (should work on modern mobile browsers)
-      if (typeof navigator === 'undefined' || 
-          !navigator.mediaDevices || 
-          !navigator.mediaDevices.getUserMedia) {
-        console.error("[ConversationView] Media devices not supported:", {
-          navigator: typeof navigator,
-          mediaDevices: !!navigator?.mediaDevices,
-          getUserMedia: !!navigator?.mediaDevices?.getUserMedia
-        });
-        alert("Your browser doesn't support video calls. Please use:\n- Chrome/Safari on iOS\n- Chrome on Android\n- Make sure you're using HTTPS");
-        return;
-      }
-
+      // Just try to get permission - let the error handling deal with unsupported browsers
       // Pre-check permissions before starting the call
       try {
         const testStream = await navigator.mediaDevices.getUserMedia({
@@ -206,22 +186,31 @@ export default function ConversationView({ conversation, onBack }: any) {
         });
         // Immediately stop the test stream
         testStream.getTracks().forEach(track => track.stop());
+        console.log("[ConversationView] Permission test successful!");
       } catch (permError: any) {
-        let errorMsg = "Cannot start video call: ";
+        console.error("[ConversationView] Permission error:", permError);
+        let errorMsg = "Cannot start video call:\n\n";
         if (permError.name === "NotAllowedError" || permError.name === "PermissionDeniedError") {
-          errorMsg += "Camera/microphone permission denied. Please allow access when prompted.";
+          errorMsg += "❌ Camera/microphone permission denied.\n\nPlease:\n1. Tap 'Allow' when prompted\n2. Check browser settings\n3. Grant camera/mic permissions";
         } else if (permError.name === "NotFoundError" || permError.name === "DevicesNotFoundError") {
-          errorMsg += "No camera or microphone found. Please check your device.";
+          errorMsg += "❌ No camera or microphone found.\n\nPlease check:\n1. Device has a camera\n2. Camera is not covered\n3. Try restarting your browser";
         } else if (permError.name === "NotReadableError" || permError.name === "TrackStartError") {
-          errorMsg += "Camera/microphone is being used by another application.";
+          errorMsg += "❌ Camera is already in use.\n\nPlease:\n1. Close other apps using camera\n2. Refresh the page\n3. Restart your browser";
         } else if (permError.name === "NotSupportedError") {
-          errorMsg += "Your browser doesn't support camera access on this device.";
+          errorMsg += "❌ Your browser doesn't support video calls.\n\nPlease use:\n• Chrome on Android\n• Safari on iOS\n• Make sure you're on HTTPS";
         } else if (permError.name === "SecurityError") {
-          errorMsg += "Camera access blocked. Make sure you're using HTTPS.";
+          errorMsg += "❌ Camera access blocked.\n\nPlease:\n1. Make sure URL is HTTPS\n2. Check browser permissions\n3. Try incognito/private mode";
+        } else if (permError.name === "TypeError") {
+          errorMsg += "❌ Browser doesn't support media access.\n\nPlease:\n1. Update your browser\n2. Use Chrome/Safari\n3. Make sure you're on HTTPS";
         } else {
-          errorMsg += permError.message || "Unknown error";
+          errorMsg += "❌ " + (permError.message || "Unknown error") + "\n\nBrowser: " + (navigator.userAgent.includes("Chrome") ? "Chrome" : navigator.userAgent.includes("Safari") ? "Safari" : "Other");
         }
         alert(errorMsg);
+        console.log("[ConversationView] Full error details:", {
+          name: permError.name,
+          message: permError.message,
+          userAgent: navigator.userAgent
+        });
         return;
       }
 
@@ -243,19 +232,14 @@ export default function ConversationView({ conversation, onBack }: any) {
   const handleAcceptCall = async () => {
     // Pre-check permissions before accepting
     try {
-      if (typeof navigator === 'undefined' || 
-          !navigator.mediaDevices || 
-          !navigator.mediaDevices.getUserMedia) {
-        alert("Your browser doesn't support video calls. Please update your browser.");
-        setShowIncomingCall(false);
-        return;
-      }
-
+      console.log("[ConversationView] Accepting call, checking permissions...");
+      
       const testStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user" },
         audio: true
       });
       testStream.getTracks().forEach(track => track.stop());
+      console.log("[ConversationView] Permission granted, accepting call");
       
       // Clear call-request signals before accepting
       if (pendingSignals) {
