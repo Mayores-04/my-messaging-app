@@ -30,6 +30,7 @@ export default function VideoCallModal({
     new Set()
   );
   const [connectionState, setConnectionState] = useState<string>("initializing");
+  const [callEnded, setCallEnded] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -231,12 +232,22 @@ export default function VideoCallModal({
     newPeer.on("error", (err) => {
       console.error("[VideoCall] Peer error:", err);
       setCallStatus("Connection error");
+      // Only close on critical errors
+      if (err.message?.includes("Connection failed") || err.message?.includes("Ice connection failed")) {
+        setTimeout(() => {
+          setCallEnded(true);
+          onClose();
+        }, 2000);
+      }
     });
 
     newPeer.on("close", () => {
       console.log("[VideoCall] Peer closed");
-      setCallStatus("Call ended");
-      setTimeout(() => onClose(), 1000);
+      // Only trigger onClose if call was intentionally ended
+      if (callEnded) {
+        setCallStatus("Call ended");
+        setTimeout(() => onClose(), 500);
+      }
     });
 
     setPeer(newPeer);
@@ -270,6 +281,7 @@ export default function VideoCallModal({
           if (signal.type === "call-ended") {
             console.log("[VideoCall] Received call-ended signal");
             setCallStatus("Call ended by other user");
+            setCallEnded(true);
             // Mark as processed before clearing
             setProcessedSignals((prev) => {
               const newSet = new Set(prev);
@@ -358,6 +370,9 @@ export default function VideoCallModal({
   };
 
   const endCall = async () => {
+    console.log("[VideoCall] Ending call...");
+    setCallEnded(true);
+    
     try {
       // Send end call signal
       await sendSignal({
