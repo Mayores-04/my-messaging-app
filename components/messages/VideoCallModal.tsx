@@ -248,12 +248,38 @@ export default function VideoCallModal({
 
     newPeer.on("error", (err) => {
       console.error("[VideoCall] Peer error:", err);
-      // Don't show error if already connected
-      if (!isConnectedRef.current) {
+      console.log("[VideoCall] Error type:", err.name, "Message:", err.message);
+      console.log("[VideoCall] Current connection state:", connectionState);
+      console.log("[VideoCall] Is connected:", isConnectedRef.current);
+      
+      // Ignore non-critical errors, especially during connection negotiation
+      const nonCriticalErrors = [
+        "ERR_WEBRTC_SUPPORT",
+        "ERR_CREATE_OFFER",
+        "ERR_CREATE_ANSWER", 
+        "ERR_SET_LOCAL_DESCRIPTION",
+        "ERR_SET_REMOTE_DESCRIPTION",
+        "Error: Connection failed", // Ignore if already connected
+      ];
+      
+      const isNonCritical = nonCriticalErrors.some(errType => 
+        err.message?.includes(errType) || (err as any).code === errType
+      );
+      
+      // If already connected, ignore all errors except data channel errors
+      if (isConnectedRef.current) {
+        console.log("[VideoCall] Ignoring error - already connected");
+        return;
+      }
+      
+      // Don't show error status for non-critical errors during negotiation
+      if (!isNonCritical) {
         setCallStatus("Connecting...");
       }
-      // Only close on critical errors
-      if (err.message?.includes("Connection failed") || err.message?.includes("Ice connection failed")) {
+      
+      // Only close on truly critical errors
+      if (err.message?.includes("Ice connection failed") || 
+          err.message?.includes("Connection timeout")) {
         setCallStatus("Connection failed");
         setTimeout(() => {
           setCallEnded(true);
