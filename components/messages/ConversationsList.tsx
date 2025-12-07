@@ -8,10 +8,6 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
   const friends = useQuery(api.friends.getFriendsForCurrentUser);
   const getOrCreateConversation = useMutation(api.messages.getOrCreateConversation);
 
-  // Debug: Log conversations to see online status
-  console.log("Conversations with online status:", conversations);
-  console.log("Friends with online status:", friends);
-
   const handleSelectFriend = async (friend: any) => {
     try {
       const conversationId = await getOrCreateConversation({ 
@@ -42,7 +38,8 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
   }
 
   return (
-    <div className="w-full rounded-lg">
+    <div className="w-full h-full flex flex-col rounded-lg">
+      <h1 className="text-3xl font-bold text-white mb-4">Messages</h1>
       <div className="mb-3">
         <input
           placeholder="Search conversations..."
@@ -50,7 +47,7 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
         />
       </div>
 
-      <div className="space-y-2">
+      <div className="flex-1 overflow-y-auto space-y-2">
         {/* Show existing conversations */}
         {conversations.map((conv: any) => (
           <div
@@ -58,14 +55,14 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
             onClick={() => onSelectConversation(conv)}
             className={`flex items-center gap-3 p-3 rounded-lg hover:bg-[#2d2520] cursor-pointer transition-colors border-2 ${
               selectedId === conv._id 
-                ? 'bg-[#2d2520] border-[#e67919]' 
+                ? 'bg-[#2d2520] border-transparent' 
                 : conv.unreadCount > 0
                   ? 'bg-[#211811] border-[#e67919]'
-                  : 'bg-[#211811] border-[#53473c]'
+                  : 'bg-[#181411] border-transparent'
             }`}
           >
             <div className="relative w-12 h-12">
-              <div className="w-12 h-12 rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
+              <div className="rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
                 {conv.otherUserAvatar ? (
                   <Image
                     src={conv.otherUserAvatar}
@@ -83,17 +80,17 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
               )}
             </div>
 
-            <div className="flex-1 min-w-0">
+            <div className="relative  w-full flex-1 min-w-0">
               <div className="flex items-center justify-between">
                 <p className={`font-medium text-sm truncate ${conv.unreadCount > 0 ? 'text-white font-bold' : 'text-white'}`}>
                   {conv.otherUserName}
                 </p>
-                <div className="flex flex-col items-end">
+                <div className="flex flex-col items-end absolute right-0 top-0">
                   <span className="text-xs text-[#b8aa9d]">
                     {new Date(conv.lastMessageAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </span>
                   {conv.unreadCount > 0 && (
-                    <span className="inline-flex items-center justify-center bg-[#e67919] text-white rounded-full w-5 h-5 text-xs font-bold mt-1">
+                    <span className="inline-flex items-center justify-center bg-[#e67919] text-white rounded-full w-5 h-5 text-xs font-bold mt-2">
                       {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
                     </span>
                   )}

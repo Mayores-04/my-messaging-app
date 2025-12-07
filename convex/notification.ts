@@ -16,15 +16,26 @@ export const getNotificationsForCurrentUser = query({
       .order('desc')
       .collect()
 
-    return notifications.map((n) => ({
-      _id: n._id,
-      type: n.type,
-      message: n.message,
-      senderEmail: n.senderEmail,
-      read: n.read,
-      createdAt: n._creationTime,
-      friendshipId: n.friendshipId ?? null,
-    }))
+    // Fetch users to enrich notifications with sender name/avatar
+    const allUsers = await ctx.db.query('users').collect()
+
+    return notifications.map((n) => {
+      const sender = allUsers.find((u: any) => u.email === n.senderEmail)
+      const senderName = sender?.fullName ?? sender?.firstName ?? n.senderEmail
+      const senderAvatar = sender?.avatarUrl ?? null
+
+      return {
+        _id: n._id,
+        type: n.type,
+        message: n.message,
+        senderEmail: n.senderEmail,
+        senderName,
+        senderAvatar,
+        read: n.read,
+        createdAt: n._creationTime,
+        friendshipId: n.friendshipId ?? null,
+      }
+    })
   },
 })
 

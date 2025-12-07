@@ -5,8 +5,6 @@ import { useUser, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 
 interface AppSidebarProps {
   isOpen: boolean;
@@ -16,11 +14,6 @@ interface AppSidebarProps {
 export function AppSidebar({ isOpen, toggleSidebar }: AppSidebarProps) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const { user } = useUser();
-  const setUserOffline = useMutation(api.users.setUserOffline);
-
-  const handleSignOut = async () => {
-    await setUserOffline();
-  };
 
   const sections = [
     {

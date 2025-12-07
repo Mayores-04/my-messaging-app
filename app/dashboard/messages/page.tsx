@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import Image from "next/image";
 import ConversationsList from "@/components/messages/ConversationsList";
 import ConversationView from "@/components/messages/ConversationView";
 
@@ -20,8 +19,7 @@ export default function MessagesPage() {
   return (
     <div className="flex gap-0 w-full h-screen">
       {/* Conversations Sidebar */}
-      <aside className={`${selectedConversation ? 'hidden md:block' : 'block'} w-full md:w-80 bg-[#181411] border-[#53473c] border-r-2 p-5 overflow-y-auto h-full`}>
-        <h1 className="text-3xl font-bold text-white mb-6">Messages</h1>
+      <aside className={`${selectedConversation ? 'hidden md:block' : 'block'} w-full md:w-80 bg-[#181411] border-[#53473c] border-r-2 p-5 overflow-hidden h-full flex flex-col`}>
         <ConversationsList 
           onSelectConversation={setSelectedConversation}
           selectedId={selectedConversation?._id}

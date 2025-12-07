@@ -1,8 +1,8 @@
 "use client";
 import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation } from "convex/react";
-import { ArrowLeft, Send } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { ArrowLeft, MenuIcon, PhoneCall, Send, VideoIcon } from "lucide-react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Button } from "../ui/button";
 import Image from "next/image";
 
@@ -23,6 +23,40 @@ export default function ConversationView({ conversation, onBack }: any) {
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const isInitialLoadRef = useRef(true);
+
+  // Scroll to bottom immediately when messages load - use useLayoutEffect to avoid flash
+  useLayoutEffect(() => {
+    if (messages && messages.length > 0 && messagesContainerRef.current) {
+      if (isInitialLoadRef.current) {
+        // Instant scroll to bottom on initial load, before paint
+        messagesContainerRef.current.scrollTop =
+          messagesContainerRef.current.scrollHeight;
+        isInitialLoadRef.current = false;
+      }
+    }
+  }, [messages]);
+
+  // Smooth scroll for new messages after initial load
+  useEffect(() => {
+    if (
+      messages &&
+      messages.length > 0 &&
+      !isInitialLoadRef.current &&
+      messagesContainerRef.current
+    ) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [messages?.length]);
+
+  // Reset initial load flag when conversation changes
+  useEffect(() => {
+    isInitialLoadRef.current = true;
+  }, [conversation._id]);
 
   // Mark messages as read when conversation opens or new messages arrive
   useEffect(() => {
@@ -99,34 +133,50 @@ export default function ConversationView({ conversation, onBack }: any) {
     <div className="flex flex-col h-screen w-full">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-[#53473c] bg-[#181411]">
-        <Button
-          onClick={onBack}
-          className="md:hidden text-white hover:text-[#e67919]"
-        >
-          <ArrowLeft className="w-6 h-6" />
-        </Button>
-        <div className="w-10 h-10 rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
-          {conversation.otherUserAvatar ? (
-            <Image
-              src={conversation.otherUserAvatar}
-              alt={conversation.otherUserName}
-              width={40}
-              height={40}
-            />
-          ) : (
-            <span className="text-sm">{conversation.otherUserName[0]}</span>
-          )}
+        <div className="flex flex-row w-full gap-3 items-center ">
+          <Button
+            onClick={onBack}
+            className="md:hidden text-white hover:text-[#e67919]"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </Button>
+          <div className="w-10 h-10 rounded-full overflow-hidden bg-[#181411] flex items-center justify-center text-white font-semibold">
+            {conversation.otherUserAvatar ? (
+              <Image
+                src={conversation.otherUserAvatar}
+                alt={conversation.otherUserName}
+                width={40}
+                height={40}
+              />
+            ) : (
+              <span className="text-sm">{conversation.otherUserName[0]}</span>
+            )}
+          </div>
+          <div>
+            <h2 className="text-white font-semibold">
+              {conversation.otherUserName}
+            </h2>
+            <p className="text-[#b8aa9d] text-xs">
+              {isTyping
+                ? "typing..."
+                : userStatus?.isOnline
+                  ? "Active now"
+                  : "Offline"}
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-white font-semibold">{conversation.otherUserName}</h2>
-          <p className="text-[#b8aa9d] text-xs">
-            {isTyping ? "typing..." : userStatus?.isOnline ? "Active now" : "Offline"}
-          </p>
+        <div className="flex flex-row">
+          <PhoneCall className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer" />
+          <VideoIcon className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer ml-4" />
+          <MenuIcon className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer ml-4" />
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+      >
         {messages === undefined ? (
           <div className="text-[#b8aa9d] text-center">Loading messages...</div>
         ) : messages.length === 0 ? (
@@ -164,7 +214,7 @@ export default function ConversationView({ conversation, onBack }: any) {
             );
           })
         )}
-        
+
         {/* Typing indicator */}
         {isTyping && (
           <div className="flex justify-start">
@@ -180,7 +230,10 @@ export default function ConversationView({ conversation, onBack }: any) {
       </div>
 
       {/* Input Message*/}
-      <form onSubmit={handleSend} className="p-4 border-t border-[#53473c] bg-[#181411]">
+      <form
+        onSubmit={handleSend}
+        className="p-4 border-t border-[#53473c] bg-[#181411]"
+      >
         <div className="flex gap-2">
           <input
             type="text"
