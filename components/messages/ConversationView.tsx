@@ -180,10 +180,36 @@ export default function ConversationView({ conversation, onBack }: any) {
       // Just try to get permission - let the error handling deal with unsupported browsers
       // Pre-check permissions before starting the call
       try {
-        const testStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
-          audio: true
-        });
+        // Support for legacy APIs (allow any browser implementation)
+        const getUserMedia = 
+          navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices) ||
+          (navigator as any).getUserMedia?.bind(navigator) ||
+          (navigator as any).webkitGetUserMedia?.bind(navigator) ||
+          (navigator as any).mozGetUserMedia?.bind(navigator);
+
+        if (!getUserMedia) {
+           // Don't throw, just warn and try to proceed (will likely fail later but user asked to allow all)
+           console.warn("getUserMedia not found");
+        }
+
+        let testStream: MediaStream;
+        
+        if (navigator.mediaDevices?.getUserMedia) {
+          testStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: true
+          });
+        } else if (getUserMedia) {
+           testStream = await new Promise<MediaStream>((resolve, reject) => {
+             (getUserMedia as any)({
+                video: { facingMode: "user" },
+                audio: true
+             }, resolve, reject);
+           });
+        } else {
+           throw new Error("No media API available");
+        }
+
         // Immediately stop the test stream
         testStream.getTracks().forEach(track => track.stop());
         console.log("[ConversationView] Permission test successful!");
@@ -201,17 +227,20 @@ export default function ConversationView({ conversation, onBack }: any) {
         } else if (permError.name === "SecurityError") {
           errorMsg += "❌ Camera access blocked.\n\nPlease:\n1. Make sure URL is HTTPS\n2. Check browser permissions\n3. Try incognito/private mode";
         } else if (permError.name === "TypeError") {
-          errorMsg += "❌ Browser doesn't support media access.\n\nPlease:\n1. Update your browser\n2. Use Chrome/Safari\n3. Make sure you're on HTTPS";
+          // Check if we are on HTTP (insecure)
+          if (window.location.protocol === 'http:' && !window.location.hostname.includes('localhost')) {
+             errorMsg += "⚠️ Warning: You are using HTTP (insecure).\nMost browsers block camera access on HTTP.\n\nIf it fails, please switch to HTTPS or use localhost.";
+          } else {
+             errorMsg += "❌ Browser doesn't support media access.\n\nPlease:\n1. Update your browser\n2. Use Chrome/Safari\n3. Make sure you're on HTTPS";
+          }
         } else {
           errorMsg += "❌ " + (permError.message || "Unknown error") + "\n\nBrowser: " + (navigator.userAgent.includes("Chrome") ? "Chrome" : navigator.userAgent.includes("Safari") ? "Safari" : "Other");
         }
-        alert(errorMsg);
-        console.log("[ConversationView] Full error details:", {
-          name: permError.name,
-          message: permError.message,
-          userAgent: navigator.userAgent
-        });
-        return;
+        
+        // User asked to "allow all", so we show the error but DON'T return
+        // This allows the code to proceed to sendSignal even if pre-check failed
+        alert(errorMsg + "\n\nAttempting to start call anyway...");
+        // return; // REMOVED to allow proceeding
       }
 
       // Permissions granted, start the call

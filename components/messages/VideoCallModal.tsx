@@ -36,6 +36,7 @@ export default function VideoCallModal({
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerRef = useRef<SimplePeer.Instance | null>(null);
   const isConnectedRef = useRef(false);
+  const isIntentionalCloseRef = useRef(false);
 
   const sendSignal = useMutation(api.videoCalls.sendSignal);
   const clearSignal = useMutation(api.videoCalls.clearSignal);
@@ -50,23 +51,38 @@ export default function VideoCallModal({
   useEffect(() => {
     const initMedia = async () => {
       try {
-        // Check if mediaDevices is supported
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("Your browser doesn't support media devices. Please use a modern browser.");
+        // Support for legacy APIs (allow any browser implementation)
+        const getUserMedia = 
+          navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices) ||
+          (navigator as any).getUserMedia?.bind(navigator) ||
+          (navigator as any).webkitGetUserMedia?.bind(navigator) ||
+          (navigator as any).mozGetUserMedia?.bind(navigator);
+
+        if (!getUserMedia) {
+          throw new Error("Your browser doesn't support media devices.");
         }
 
         // Request with mobile-friendly constraints
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { min: 320, ideal: 1280, max: 1920 },
-            height: { min: 240, ideal: 720, max: 1080 },
-            frameRate: { ideal: 24, max: 30 },
-            facingMode: "user"
-          },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
+        const stream = await new Promise<MediaStream>((resolve, reject) => {
+          const constraints = {
+            video: {
+              width: { min: 320, ideal: 1280, max: 1920 },
+              height: { min: 240, ideal: 720, max: 1080 },
+              frameRate: { ideal: 24, max: 30 },
+              facingMode: "user"
+            },
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }
+          };
+
+          if (navigator.mediaDevices?.getUserMedia) {
+            navigator.mediaDevices.getUserMedia(constraints).then(resolve).catch(reject);
+          } else {
+            // Legacy callback style
+            (getUserMedia as any)(constraints, resolve, reject);
           }
         });
         
@@ -242,6 +258,9 @@ export default function VideoCallModal({
   useEffect(() => {
     if (!localStream) return;
 
+    // Reset intentional close ref for new connection attempt
+    isIntentionalCloseRef.current = false;
+
     // If we already have an active peer for this stream, don't recreate
     // This helps with React Strict Mode double-invocation
     if (peerRef.current && !peerRef.current.destroyed) {
@@ -283,6 +302,8 @@ export default function VideoCallModal({
           { urls: "stun:stun2.l.google.com:19302" },
           { urls: "stun:stun3.l.google.com:19302" },
           { urls: "stun:stun4.l.google.com:19302" },
+          { urls: "stun:global.stun.twilio.com:3478" },
+          { urls: "stun:stun.services.mozilla.com" },
         ],
       },
     });
@@ -393,21 +414,17 @@ export default function VideoCallModal({
 
     newPeer.on("close", () => {
       console.log("[VideoCall] Peer closed");
-      console.log("[VideoCall] Call ended state:", callEnded);
       
-      if (!callEnded) {
-        // Unexpected closure
-        console.log("[VideoCall] Unexpected peer closure");
-        setCallStatus("Connection lost");
-        setConnectionState("disconnected");
-        isConnectedRef.current = false;
-        
-        // Optional: Try to reconnect or just notify user
-        // For now, let's keep the modal open but show the error
-      } else {
-        setCallStatus("Call ended");
-        setTimeout(() => onClose(), 500);
+      // Ignore if we intentionally closed it (e.g. end call or cleanup)
+      if (isIntentionalCloseRef.current) {
+        console.log("[VideoCall] Ignoring intentional peer closure");
+        return;
       }
+
+      console.log("[VideoCall] Unexpected peer closure");
+      setCallStatus("Connection lost");
+      setConnectionState("disconnected");
+      isConnectedRef.current = false;
     });
 
     setPeer(newPeer);
@@ -415,42 +432,12 @@ export default function VideoCallModal({
 
     return () => {
       clearTimeout(connectionTimeout);
-      // Only destroy if we are truly unmounting or stream changed
-      // In Strict Mode, we might want to delay this or check if it's a re-render
-      // But for now, let's just log it
       console.log("[VideoCall] Peer effect cleanup triggered");
-      
-      // Note: We don't destroy the peer here immediately to survive Strict Mode re-renders
-      // But we need to make sure we don't leak peers.
-      // The peerRef check at the start of the effect handles the re-creation prevention.
-      // But if we leave this component for real, we need to destroy.
-      
-      // For now, let's rely on the parent component unmounting or endCall being called
-      // to destroy the peer.
-      // However, if localStream changes, we DO need to destroy the old peer.
-      
-      // Let's use a small timeout to check if we're still mounted? No, that's hacky.
-      
-      // Better approach: Just destroy it. The peerRef check above will prevent
-      // creation if we didn't destroy it. But here we ARE destroying it.
-      
-      // If we destroy it here, the peerRef check above is useless for Strict Mode
-      // because the cleanup runs before the next effect.
-      
-      // So, to fix Strict Mode:
-      // We should NOT destroy the peer in the cleanup of the effect that created it,
-      // UNLESS the component is actually unmounting.
-      // But we can't know that easily.
-      
-      // Alternative: Store the cleanup function in a ref and call it on mount?
-      
-      // Let's try the standard cleanup but with the "close" handler fix we just added.
-      // If Strict Mode destroys it, the "close" handler will fire.
-      // If !callEnded, it sets status to "Connection lost".
-      // This explains why you see "Peer: X" but "Connected" (before my fix).
       
       if (newPeer && !newPeer.destroyed) {
         console.log("[VideoCall] Destroying peer in cleanup");
+        // Mark as intentional to prevent "Connection Lost" state
+        isIntentionalCloseRef.current = true;
         newPeer.destroy();
       }
     };
@@ -566,6 +553,7 @@ export default function VideoCallModal({
   const endCall = async () => {
     console.log("[VideoCall] Ending call...");
     setCallEnded(true);
+    isIntentionalCloseRef.current = true;
     
     try {
       // Send end call signal
