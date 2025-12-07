@@ -10,7 +10,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <div className="flex min-h-screen bg-[#211811]">
+    <div className="flex min-h-screen bg-[#211811] w-full">
       <Authenticated>
         <AppSidebar
           isOpen={sidebarOpen}
@@ -19,7 +19,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <main
           className={cn(
             "flex-1 transition-all duration-300",
-            sidebarOpen ? "ml-64" : "ml-16"
+            sidebarOpen ? "ml-64" : "ml-20"
           )}
         >
           {children}

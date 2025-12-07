@@ -18,6 +18,9 @@ export default function AddFriendsPage() {
   const storeUser = useMutation(api.users.storeUser);
   const currentFriends = useQuery(api.friends.getFriendsForCurrentUser);
   const pendingRequests = useQuery(api.friends.getPendingRequests);
+  
+  // Get sent requests (where current user is the sender)
+  const sentRequests = useQuery(api.friends.getSentRequests);
 
   // Store current user in database on mount
   useEffect(() => {
@@ -37,12 +40,24 @@ export default function AddFriendsPage() {
     }
   };
 
-  const isAlreadyFriend = (email: string) => {
-    return currentFriends?.some((f: any) => f.email === email) || addedFriends.has(email);
+  const getFriendshipStatus = (email: string) => {
+    // Check if already friends
+    if (currentFriends?.some((f: any) => f.email === email)) {
+      return 'friends';
+    }
+    // Check if request was sent (from database)
+    if (sentRequests?.some((req: any) => req.receiverEmail === email)) {
+      return 'pending';
+    }
+    // Check if request was just sent (local state)
+    if (addedFriends.has(email)) {
+      return 'pending';
+    }
+    return 'none';
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto p-5">
       <h1 className="text-3xl font-bold text-white mb-6">Add Friends</h1>
 
       <div className="bg-[#26211c] border border-[#53473c] rounded-lg p-6">
@@ -103,31 +118,40 @@ export default function AddFriendsPage() {
                 </div>
               </div>
 
-              {isAlreadyFriend(user.email) ? (
-                <button
-                  disabled
-                  className="flex items-center gap-2 px-4 py-2 bg-[#53473c] text-[#b8aa9d] rounded-lg cursor-not-allowed"
-                >
-                  <Check className="w-4 h-4" />
-                  Friends
-                </button>
-              ) : addedFriends.has(user.email) ? (
-                <button
-                  disabled
-                  className="flex items-center gap-2 px-4 py-2 bg-[#53473c] text-[#b8aa9d] rounded-lg cursor-not-allowed"
-                >
-                  <Check className="w-4 h-4" />
-                  Request Sent
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleSendRequest(user.email)}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#e67919] hover:bg-[#cf6213] text-white rounded-lg transition-colors"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Send Request
-                </button>
-              )}
+              {(() => {
+                const status = getFriendshipStatus(user.email);
+                if (status === 'friends') {
+                  return (
+                    <button
+                      disabled
+                      className="flex items-center gap-2 px-4 py-2 bg-[#53473c] text-[#b8aa9d] rounded-lg cursor-not-allowed"
+                    >
+                      <Check className="w-4 h-4" />
+                      Friends
+                    </button>
+                  );
+                } else if (status === 'pending') {
+                  return (
+                    <button
+                      disabled
+                      className="flex items-center gap-2 px-4 py-2 bg-[#53473c] text-[#b8aa9d] rounded-lg cursor-not-allowed"
+                    >
+                      <Check className="w-4 h-4" />
+                      Pending
+                    </button>
+                  );
+                } else {
+                  return (
+                    <button
+                      onClick={() => handleSendRequest(user.email)}
+                      className="flex items-center gap-2 px-4 py-2 bg-[#e67919] hover:bg-[#cf6213] text-white rounded-lg transition-colors"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      Send Request
+                    </button>
+                  );
+                }
+              })()}
             </div>
           ))}
         </div>

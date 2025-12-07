@@ -224,6 +224,42 @@ export const getPendingRequests = query({
   },
 })
 
+// Get sent friend requests by the current user
+export const getSentRequests = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    // Get all pending requests where current user is the sender
+    const requests = await ctx.db
+      .query('friendships')
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('user1Email'), identity.email),
+          q.eq(q.field('status'), 'pending')
+        )
+      )
+      .collect()
+
+    // Get receiver info for each request
+    const allUsers = await ctx.db.query('users').collect()
+    
+    return requests.map((req) => {
+      const receiver = allUsers.find((u: any) => u.email === req.user2Email)
+      return {
+        _id: req._id,
+        receiverEmail: req.user2Email,
+        receiverName: receiver?.fullName ?? receiver?.firstName ?? req.user2Email,
+        receiverAvatar: receiver?.avatarUrl ?? null,
+        createdAt: req.createdAt,
+      }
+    })
+  },
+})
+
 // Remove a friend
 export const removeFriend = mutation({
   args: {
