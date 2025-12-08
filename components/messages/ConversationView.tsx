@@ -19,7 +19,7 @@ export default function ConversationView({ conversation, onBack }: any) {
     { initialNumItems: 20 }
   );
 
-  const messages = useMemo(() => [...results].reverse(), [results]);
+  const messages = useMemo(() => (results ? [...results].reverse() : []), [results]);
 
   // Compute the latest message id that the other user has read (for read-receipt avatar)
   const lastReadMessageId = (() => {
