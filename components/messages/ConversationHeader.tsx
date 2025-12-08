@@ -128,7 +128,8 @@ export default function ConversationHeader({
         user={{
           name: conversation.otherUserName,
           email: conversation.otherUserEmail,
-          avatar: conversation.otherUserAvatar
+          avatar: conversation.otherUserAvatar,
+          isOnline: userStatus?.isOnline
         }}
       />
     </>

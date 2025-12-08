@@ -1,6 +1,7 @@
 import { X, Mail, User } from "lucide-react";
 import Image from "next/image";
 import { Button } from "../ui/button";
+import { useUser } from "@clerk/nextjs";
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -9,12 +10,12 @@ interface UserProfileModalProps {
     name: string;
     email: string;
     avatar?: string;
+    isOnline?: boolean;
   };
 }
 
 export default function UserProfileModal({ isOpen, onClose, user }: UserProfileModalProps) {
   if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div 
@@ -54,8 +55,8 @@ export default function UserProfileModal({ isOpen, onClose, user }: UserProfileM
             <div>
               <h2 className="text-xl font-bold text-white">{user.name}</h2>
               <p className="text-[#b8aa9d] text-sm flex items-center justify-center gap-1 mt-1">
-                <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
-                Active
+                <span className={`w-2 h-2 rounded-full ${user.isOnline ? "bg-green-500" : "bg-gray-500"} inline-block`}></span>
+                {user.isOnline ? "Active now" : "Offline"}
               </p>
             </div>
 
