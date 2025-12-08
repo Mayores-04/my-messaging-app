@@ -75,24 +75,108 @@ export const getMessagesForConversation = query({
       .order('asc')
       .collect()
 
+    // Filter out deleted messages
+    const activeMessages = messages.filter((m) => !m.isDeleted)
+
     // Determine the last-read timestamp for the OTHER user in this conversation
     const isUser1 = conversation.user1Email === identity.email
     const otherUserLastReadAt = isUser1
       ? (conversation.user2LastReadAt ?? 0)
       : (conversation.user1LastReadAt ?? 0)
 
-    return messages.map((m) => ({
-      _id: m._id,
-      conversationId: m.conversationId,
-      senderEmail: m.senderEmail,
-      body: m.body,
-      images: m.images ?? undefined,
-      createdAt: m._creationTime,
-      // Mark whether this message (sent by the current user) has been read by the other user
-      readByOther:
-        // Only messages authored by the current user can be "read by the other"
-        (m.senderEmail === identity.email) && (m._creationTime <= otherUserLastReadAt),
-    }))
+    // Map messages and fetch reply data
+    const messagesWithReplies = await Promise.all(
+      activeMessages.map(async (m) => {
+        let replyToMessage = null
+        if (m.replyToId) {
+          const repliedMsg = await ctx.db.get(m.replyToId)
+          if (repliedMsg && !repliedMsg.isDeleted) {
+            replyToMessage = {
+              _id: repliedMsg._id,
+              body: repliedMsg.body,
+              images: repliedMsg.images,
+              senderEmail: repliedMsg.senderEmail,
+            }
+          }
+        }
+
+        return {
+          _id: m._id,
+          conversationId: m.conversationId,
+          senderEmail: m.senderEmail,
+          body: m.body,
+          images: m.images ?? undefined,
+          createdAt: m._creationTime,
+          isEdited: m.isEdited ?? false,
+          replyTo: replyToMessage,
+          // Mark whether this message (sent by the current user) has been read by the other user
+          readByOther:
+            // Only messages authored by the current user can be "read by the other"
+            (m.senderEmail === identity.email) && (m._creationTime <= otherUserLastReadAt),
+        }
+      })
+    )
+
+    return messagesWithReplies
+  },
+})
+
+// Edit a message
+export const editMessage = mutation({
+  args: {
+    messageId: v.id('messages'),
+    newBody: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const message = await ctx.db.get(args.messageId)
+    if (!message) {
+      throw new Error('Message not found')
+    }
+
+    // Verify user is the sender
+    if (message.senderEmail !== identity.email) {
+      throw new Error('Unauthorized')
+    }
+
+    // Update message and store original body if first edit
+    await ctx.db.patch(args.messageId, {
+      body: args.newBody,
+      isEdited: true,
+      originalBody: message.isEdited ? message.originalBody : message.body,
+    })
+  },
+})
+
+// Unsend a message (delete for both users)
+export const unsendMessage = mutation({
+  args: {
+    messageId: v.id('messages'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const message = await ctx.db.get(args.messageId)
+    if (!message) {
+      throw new Error('Message not found')
+    }
+
+    // Verify user is the sender
+    if (message.senderEmail !== identity.email) {
+      throw new Error('Unauthorized')
+    }
+
+    // Archive message (mark as deleted) instead of actually deleting
+    await ctx.db.patch(args.messageId, {
+      isDeleted: true,
+    })
   },
 })
 
@@ -102,6 +186,7 @@ export const sendMessage = mutation({
     conversationId: v.id('conversations'),
     body: v.string(),
     images: v.optional(v.array(v.string())),
+    replyToId: v.optional(v.id('messages')),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
@@ -129,6 +214,7 @@ export const sendMessage = mutation({
       body: args.body,
       images: args.images ?? undefined,
       createdAt: Date.now(),
+      replyToId: args.replyToId,
     })
 
     // Update conversation's last message time

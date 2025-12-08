@@ -40,11 +40,13 @@ export default function ConversationView({ conversation, onBack }: any) {
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
   const [images, setImages] = useState<string[]>([]);
+  const [replyTo, setReplyTo] = useState<any>(null);
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoadRef = useRef(true);
+  const previousMessageCountRef = useRef(0);
 
   // Video call hook
   const {
@@ -69,7 +71,7 @@ export default function ConversationView({ conversation, onBack }: any) {
     }
   }, [messages]);
 
-  // Smooth scroll for new messages after initial load
+  // Smooth scroll for new messages after initial load (only when messages are added, not removed)
   useEffect(() => {
     if (
       messages &&
@@ -77,16 +79,22 @@ export default function ConversationView({ conversation, onBack }: any) {
       !isInitialLoadRef.current &&
       messagesContainerRef.current
     ) {
-      messagesContainerRef.current.scrollTo({
-        top: messagesContainerRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+      // Only scroll if message count increased (new message added)
+      if (messages.length > previousMessageCountRef.current) {
+        messagesContainerRef.current.scrollTo({
+          top: messagesContainerRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+      // Update the previous count
+      previousMessageCountRef.current = messages.length;
     }
   }, [messages?.length]);
 
-  // Reset initial load flag when conversation changes
+  // Reset initial load flag and message count when conversation changes
   useEffect(() => {
     isInitialLoadRef.current = true;
+    previousMessageCountRef.current = 0;
   }, [conversation._id]);
 
   // Mark messages as read when conversation opens or new messages arrive
@@ -138,9 +146,11 @@ export default function ConversationView({ conversation, onBack }: any) {
         conversationId: conversation._id,
         body: messageText.trim(),
         images: images.length > 0 ? images : undefined,
+        replyToId: replyTo?._id,
       });
       setMessageText("");
       setImages([]);
+      setReplyTo(null);
       // Keep focus on the input so the user can continue typing
       try {
         // small delay to ensure React has updated the value
@@ -213,6 +223,7 @@ export default function ConversationView({ conversation, onBack }: any) {
                 isOwn={isOwn}
                 conversation={conversation}
                 isLastRead={message._id === lastReadMessageId}
+                onReply={setReplyTo}
               />
             );
           })
@@ -234,6 +245,8 @@ export default function ConversationView({ conversation, onBack }: any) {
         onEmojiClick={handleEmojiClick}
         images={images}
         onImagesChange={setImages}
+        replyTo={replyTo}
+        onCancelReply={() => setReplyTo(null)}
       />
 
       {/* Incoming Call Notification */}

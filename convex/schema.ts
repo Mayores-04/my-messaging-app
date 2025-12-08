@@ -52,6 +52,10 @@ export default defineSchema({
     createdAt: v.optional(v.number()),
     author: v.optional(v.string()),
     read: v.optional(v.boolean()),
+    isEdited: v.optional(v.boolean()),
+    isDeleted: v.optional(v.boolean()),
+    originalBody: v.optional(v.string()),
+    replyToId: v.optional(v.id("messages")),
   })
     .index("by_conversation", ["conversationId"])
     .index("by_sender", ["senderEmail"]),

@@ -4,11 +4,13 @@ import {
   GitFork,
   ImageIcon,
   LinkIcon,
+  PlusCircle,
   PlusCircleIcon,
   Scan,
   ScanFace,
   Send,
   SmileIcon,
+  X,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { RefObject, useRef, useEffect, useState } from "react";
@@ -28,6 +30,8 @@ interface MessageInputProps {
   onEmojiClick: (emojiData: any) => void;
   images: string[];
   onImagesChange: (images: string[]) => void;
+  replyTo?: any;
+  onCancelReply?: () => void;
 }
 
 export default function MessageInput({
@@ -41,6 +45,8 @@ export default function MessageInput({
   onEmojiClick,
   images,
   onImagesChange,
+  replyTo,
+  onCancelReply,
 }: MessageInputProps) {
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -247,6 +253,34 @@ export default function MessageInput({
   };
   return (
     <div className="relative">
+      {/* Reply Preview */}
+      {replyTo && (
+        <div className="px-4 pt-3 pb-1 bg-[#181411] border-t border-[#53473c]">
+          <div className="p-3 bg-[#1a1612] border-l-4 border-[#e67919] rounded flex items-start justify-between">
+            <div className="flex-1">
+              <p className="text-xs text-[#b8aa9d] mb-1">Replying to:</p>
+              {replyTo.images && replyTo.images.length > 0 && (
+                <img
+                  src={replyTo.images[0]}
+                  alt="Reply preview"
+                  className="w-12 h-12 rounded object-cover mb-1"
+                />
+              )}
+              <p className="text-sm text-white truncate">{replyTo.body || "Image"}</p>
+            </div>
+            {onCancelReply && (
+              <button
+                type="button"
+                onClick={onCancelReply}
+                className="text-[#b8aa9d] hover:text-white transition-colors ml-2"
+                aria-label="Cancel reply"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {showEmojiPicker && (
         <div
           ref={emojiPickerRef}
@@ -338,10 +372,7 @@ export default function MessageInput({
           className="hidden"
         />
         <div ref={containerRef} className="flex gap-2 items-center">
-          <ImageIcon
-            onClick={() => fileInputRef.current && fileInputRef.current.click()}
-            className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer"
-          />
+          <PlusCircle onClick={onToggleEmojiPicker} className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer" />
           <div className="flex-1 px-2 flex items-center bg-[#211811] text-white placeholder-[#b8aa9d] rounded-lg focus-within:ring-2 focus-within:ring-[#e67919]">
             <input
               ref={inputRef}
@@ -358,6 +389,10 @@ export default function MessageInput({
               className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer"
             />
           </div>
+          <ImageIcon
+            onClick={() => fileInputRef.current && fileInputRef.current.click()}
+            className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer"
+          />
           <CameraIcon onClick={() => setWebCamOpen(!webCamOpen)} className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer" />
           <Button
             type="submit"
