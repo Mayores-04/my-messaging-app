@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Bell, Check, X, UserPlus } from "lucide-react";
+import { Bell, Check, X, UserPlus, MessageSquare } from "lucide-react";
 import Image from "next/image";
 
 export default function NotificationsPage() {
@@ -11,6 +11,7 @@ export default function NotificationsPage() {
   const acceptRequest = useMutation(api.friends.acceptFriendRequest);
   const rejectRequest = useMutation(api.friends.rejectFriendRequest);
   const markAsRead = useMutation(api.notification.markAsRead);
+  const deleteNotification = useMutation(api.notification.deleteNotification);
 
   const handleAccept = async (friendshipId: any) => {
     try {
@@ -27,6 +28,22 @@ export default function NotificationsPage() {
       alert("Friend request rejected");
     } catch (error: any) {
       alert(error.message || "Failed to reject request");
+    }
+  };
+
+  const handleAcceptMessageRequest = async (notificationId: any) => {
+    try {
+      await markAsRead({ notificationId });
+    } catch (error: any) {
+      console.error("Failed to accept message request:", error);
+    }
+  };
+
+  const handleDeclineMessageRequest = async (notificationId: any) => {
+    try {
+      await deleteNotification({ notificationId });
+    } catch (error: any) {
+      console.error("Failed to decline message request:", error);
     }
   };
 
@@ -112,9 +129,13 @@ export default function NotificationsPage() {
                 className={`bg-[#26211c] border border-[#53473c] rounded-lg p-4 flex items-start gap-4 hover:bg-[#2d2520] transition-colors ${
                   !notification.read ? "border-[#e67919]" : ""
                 }`}
-                onClick={() => !notification.read && markAsRead({ notificationId: notification._id })}
+                onClick={() => {
+                  if (!notification.read && notification.type !== 'message_request') {
+                    markAsRead({ notificationId: notification._id });
+                  }
+                }}
               >
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold shrink-0">
                   {notification.senderAvatar ? (
                     <Image
                       src={notification.senderAvatar}
@@ -129,11 +150,44 @@ export default function NotificationsPage() {
                 <div className="flex-1">
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="text-white font-medium">{notification.senderName}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-white font-medium">{notification.senderName}</h3>
+                        {notification.type === 'message_request' && (
+                          <span className="bg-[#e67919]/20 text-[#e67919] text-[10px] px-1.5 py-0.5 rounded border border-[#e67919]/30 font-normal flex items-center gap-1">
+                            <MessageSquare className="w-3 h-3" />
+                            Request
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[#b8aa9d] text-sm mt-1">{notification.message}</p>
+                      
+                      {notification.type === 'message_request' && !notification.read && (
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAcceptMessageRequest(notification._id);
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-[#e67919] hover:bg-[#cf6213] text-white text-sm rounded-lg transition-colors"
+                          >
+                            <Check className="w-3 h-3" />
+                            Accept
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeclineMessageRequest(notification._id);
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-[#53473c] hover:bg-[#3a322e] text-white text-sm rounded-lg transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                            Decline
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {!notification.read && (
-                      <span className="w-2 h-2 bg-[#e67919] rounded-full"></span>
+                    {!notification.read && notification.type !== 'message_request' && (
+                      <span className="w-2 h-2 bg-[#e67919] rounded-full shrink-0"></span>
                     )}
                   </div>
                   <span className="text-xs text-[#b8aa9d] mt-2 block">

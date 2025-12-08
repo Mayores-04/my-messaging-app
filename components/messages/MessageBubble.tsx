@@ -1,8 +1,9 @@
 import Image from "next/image";
 import { useState, memo, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, Edit2, Trash2, Reply } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Edit2, Trash2, Reply, MoreVertical, Smile, Pin, Flag, Forward } from "lucide-react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import ForwardMessageModal from "./ForwardMessageModal";
 
 interface MessageBubbleProps {
   message: any;
@@ -28,9 +29,41 @@ function MessageBubble({
   const [editedText, setEditedText] = useState(message.body || "");
   const [showUnsendConfirm, setShowUnsendConfirm] = useState(false);
   const [isUnsending, setIsUnsending] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showReportConfirm, setShowReportConfirm] = useState(false);
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   
   const editMessage = useMutation(api.messages.editMessage);
   const unsendMessage = useMutation(api.messages.unsendMessage);
+  const toggleReaction = useMutation(api.messages.toggleReaction);
+  const togglePin = useMutation(api.messages.togglePin);
+  const reportMessage = useMutation(api.messages.reportMessage);
+
+  const handlePin = async () => {
+    await togglePin({ messageId: message._id });
+    setMenuOpen(false);
+  };
+
+  const handleForward = () => {
+    setShowForwardModal(true);
+    setMenuOpen(false);
+  };
+
+  const handleReport = () => {
+    setShowReportConfirm(true);
+    setMenuOpen(false);
+  };
+
+  const confirmReport = async () => {
+    await reportMessage({ messageId: message._id, reason: "User reported" });
+    setShowReportConfirm(false);
+  };
+
+  const handleReaction = async (emoji: string) => {
+    await toggleReaction({ messageId: message._id, emoji });
+    setShowEmojiPicker(false);
+  };
 
   const openLightbox = (index: number) => {
     setCurrentImageIndex(index);
@@ -126,24 +159,103 @@ function MessageBubble({
         onMouseLeave={() => setIsHovered(false)}
       >
         <div className={`flex items-center gap-2 ${isOwn ? "flex-row" : "flex-row-reverse"}`}>
-          {/* Reply button - shows on hover */}
-          {isHovered && onReply && (
-            <button
-              onClick={() => onReply(message)}
-              className="text-[#b8aa9d] hover:text-[#e67919] transition-colors p-1.5 rounded-full hover:bg-[#26211c]"
-              aria-label="Reply to message"
-            >
-              {/* <Reply className="w-4 h-4" /> */}
-              Reply
-            </button>
+          {/* Action Toolbar - shows on hover */}
+          {isHovered && (
+            <div className="flex items-center gap-2">
+               {/* Toolbar */}
+               <div className="flex items-center gap-1 bg-[#26211c] border border-[#53473c] rounded-full px-2 py-1">
+                  {/* Menu */}
+                  <div className="relative">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+                        className="text-[#b8aa9d] hover:text-white p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
+                        aria-label="More options"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                      
+                      {/* Dropdown Menu */}
+                      {menuOpen && (
+                        <div className="absolute bottom-full left-0 mb-2 w-32 bg-[#26211c] border border-[#53473c] rounded-lg shadow-lg overflow-hidden z-50 flex flex-col py-1">
+                            {isOwn && (
+                                <>
+                                    <button onClick={(e) => { e.stopPropagation(); handleEdit(); setMenuOpen(false); }} className="text-left px-4 py-2 text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-2 w-full">
+                                        <Edit2 className="w-3 h-3" /> Edit
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); handleUnsend(); setMenuOpen(false); }} className="text-left px-4 py-2 text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-2 w-full">
+                                        <Trash2 className="w-3 h-3" /> Unsend
+                                    </button>
+                                </>
+                            )}
+                            <button onClick={(e) => { e.stopPropagation(); handleForward(); }} className="text-left px-4 py-2 text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-2 w-full">
+                                <Forward className="w-3 h-3" /> Forward
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handlePin(); }} className="text-left px-4 py-2 text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-2 w-full">
+                                <Pin className="w-3 h-3" /> {message.isPinned ? "Unpin" : "Pin"}
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleReport(); }} className="text-left px-4 py-2 text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-2 w-full">
+                                <Flag className="w-3 h-3" /> Report
+                            </button>
+                        </div>
+                      )}
+                  </div>
+
+                  {/* Reply */}
+                  {onReply && (
+                    <button 
+                      onClick={() => onReply(message)}
+                      className="text-[#b8aa9d] hover:text-white p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
+                      aria-label="Reply"
+                    >
+                      <Reply className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {/* React */}
+                  <div className="relative">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }}
+                        className="text-[#b8aa9d] hover:text-white p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
+                        aria-label="Add reaction"
+                    >
+                        <Smile className="w-4 h-4" />
+                    </button>
+                    {showEmojiPicker && (
+                        <div className="absolute bottom-full left-0 mb-2 bg-[#26211c] border border-[#53473c] rounded-full shadow-lg p-1 flex gap-1 z-50">
+                            {["👍", "❤️", "😂", "😮", "😢", "😡"].map(emoji => (
+                                <button
+                                    key={emoji}
+                                    onClick={(e) => { e.stopPropagation(); handleReaction(emoji); }}
+                                    className="hover:bg-[#3a332c] p-1 rounded-full text-lg transition-colors"
+                                >
+                                    {emoji}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                  </div>
+               </div>
+
+               {/* Timestamp */}
+               <span className="text-xs text-[#b8aa9d] select-none">
+                  {new Date(message.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+               </span>
+            </div>
           )}
 
           <div className="flex flex-col">
             <div
-              className={`relative max-w-[500px] rounded-2xl px-4 py-2 ${
-                isOwn
-                  ? "bg-[#e67919] text-white"
-                  : "bg-[#26211c] text-white border border-[#53473c]"
+              className={`relative max-w-[500px] ${
+                (!message.body && message.images && message.images.length > 0)
+                  ? "bg-transparent"
+                  : `rounded-2xl px-4 py-2 ${
+                      isOwn
+                        ? "bg-[#e67919] text-white"
+                        : "bg-[#26211c] text-white border border-[#53473c]"
+                    }`
               }`}
             >
             {/* Replied Message Preview */}
@@ -166,29 +278,29 @@ function MessageBubble({
               </div>
             )}
 
-            {/* Edit and Unsend buttons */}
-            {isHovered && isOwn && !isEditing && (
-            <div className="absolute -top-6.5  right-0 flex gap-2 bg-[#26211c] border border-[#53473c] rounded px-2 py-1">
-              {message.body && (
-                <button
-                  onClick={handleEdit}
-                  className="text-xs text-white hover:text-[#e67919] transition-colors flex items-center gap-1"
-                  aria-label="Edit message"
-                >
-                  <Edit2 className="w-3 h-3" />
-                  Edit
-                </button>
-              )}
-              <button
-                onClick={handleUnsend}
-                className="text-xs text-white hover:text-red-500 transition-colors flex items-center gap-1"
-                aria-label="Unsend message"
-              >
-                <Trash2 className="w-3 h-3" />
-                Unsend
-              </button>
-            </div>
-          )}
+            {/* Pinned Indicator */}
+            {message.isPinned && (
+                <div className="absolute -top-2 -right-2 bg-[#e67919] text-white rounded-full p-1 shadow-sm z-10">
+                    <Pin className="w-3 h-3 fill-current" />
+                </div>
+            )}
+
+            {/* Reactions */}
+            {message.reactions && message.reactions.length > 0 && (
+                <div className="absolute -bottom-3 right-0 flex gap-1 bg-[#26211c] border border-[#53473c] rounded-full px-1 py-0.5 shadow-sm z-10">
+                    {Object.entries(
+                        message.reactions.reduce((acc: any, curr: any) => {
+                            acc[curr.emoji] = (acc[curr.emoji] || 0) + 1;
+                            return acc;
+                        }, {})
+                    ).map(([emoji, count]: any) => (
+                        <span key={emoji} className="text-xs px-1">
+                            {emoji} {count > 1 && <span className="text-[10px] text-[#b8aa9d] ml-0.5">{count}</span>}
+                        </span>
+                    ))}
+                </div>
+            )}
+
           {message.images && message.images.length > 0 ? (
             <div className="mb-2">
               {message.images.length === 1 ? (
@@ -312,22 +424,12 @@ function MessageBubble({
               </>
             )
           )}
-          <span
-            className={`text-xs mt-1 block ${
-              isOwn ? "text-[#211811]" : "text-[#b8aa9d]"
-            }`}
-          >
-            {new Date(message.createdAt).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </span>
             </div>
 
             {/* Show other user's avatar under the latest message they have read */}
             {isLastRead && message.readByOther && (
               <div className={`relative mt-1 ${isOwn ? "mr-0" : "ml-0"}`}>
-                <div className="w-4 h-4 rounded-full overflow-hidden bg-[#53473c]">
+                <div className="w-4 h-4 absolute right-0 -bottom-4 rounded-full overflow-hidden bg-[#53473c]">
                   {conversation.otherUserAvatar ? (
                     <Image
                       src={conversation.otherUserAvatar}
@@ -384,6 +486,40 @@ function MessageBubble({
                 ) : (
                   "Unsend"
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Confirmation Modal */}
+      {showReportConfirm && (
+        <div
+          className="fixed inset-0 bg-black/70 bg-opacity-50 z-50 flex items-center justify-center"
+          onClick={() => setShowReportConfirm(false)}
+        >
+          <div
+            className="bg-[#26211c] border border-[#53473c] rounded-lg p-6 max-w-sm mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-white text-lg font-semibold mb-2">
+              Report message?
+            </h3>
+            <p className="text-[#b8aa9d] text-sm mb-6">
+              This message will be reported to admins for review.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowReportConfirm(false)}
+                className="px-4 py-2 rounded bg-[#53473c] text-white hover:bg-[#6a5a4a] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmReport}
+                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                Report
               </button>
             </div>
           </div>
@@ -449,6 +585,13 @@ function MessageBubble({
           )}
         </div>
       )}
+
+      {/* Forward Message Modal */}
+      <ForwardMessageModal
+        isOpen={showForwardModal}
+        onClose={() => setShowForwardModal(false)}
+        message={message}
+      />
     </>
   );
 }

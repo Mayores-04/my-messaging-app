@@ -60,9 +60,21 @@ export default defineSchema({
     isDeleted: v.optional(v.boolean()),
     originalBody: v.optional(v.string()),
     replyToId: v.optional(v.id("messages")),
+    reactions: v.optional(v.array(v.object({
+      userEmail: v.string(),
+      emoji: v.string(),
+    }))),
+    isPinned: v.optional(v.boolean()),
   })
     .index("by_conversation", ["conversationId"])
     .index("by_sender", ["senderEmail"]),
+
+  reports: defineTable({
+    messageId: v.id("messages"),
+    reporterEmail: v.string(),
+    reason: v.string(),
+    createdAt: v.number(),
+  }).index("by_message", ["messageId"]),
 
   typingIndicators: defineTable({
     conversationId: v.id("conversations"),

@@ -2,6 +2,7 @@
 import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
 import { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense, useMemo } from "react";
+import { ChevronDown, Pin } from "lucide-react";
 import ConversationHeader from "./ConversationHeader";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
@@ -37,6 +38,10 @@ export default function ConversationView({ conversation, onBack }: any) {
 
   const userStatus = useQuery(api.users.getUserOnlineStatus, {
     userEmail: conversation.otherUserEmail,
+  });
+
+  const pinnedMessages = useQuery(api.messages.getPinnedMessages, {
+    conversationId: conversation._id,
   });
 
   const sendMessage = useMutation(api.messages.sendMessage);
@@ -211,6 +216,8 @@ export default function ConversationView({ conversation, onBack }: any) {
 
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
+  const [showPinnedDropdown, setShowPinnedDropdown] = useState(false);
+
   const handleEmojiClick = (emojiData: any) => {
     setMessageText((prev) => prev + emojiData.emoji);
   };
@@ -235,6 +242,11 @@ export default function ConversationView({ conversation, onBack }: any) {
     if (status === "CanLoadMore") {
         loadMore(20);
     }
+  };
+
+  const handlePinClick = (messageId: string) => {
+    handleReplyClick(messageId);
+    setShowPinnedDropdown(false);
   };
 
   // Search for message effect
@@ -276,6 +288,73 @@ export default function ConversationView({ conversation, onBack }: any) {
         onBack={onBack}
         onVideoCall={handleStartVideoCall}
       />
+
+      {/* Pinned Messages Banner */}
+      {pinnedMessages && pinnedMessages.length > 0 && (
+        <div className="relative z-20 bg-[#26211c] border-b border-[#53473c] px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-[#3a332c] transition-colors"
+             onClick={() => {
+                 if (pinnedMessages.length === 1) {
+                     handlePinClick(pinnedMessages[0]._id);
+                 } else {
+                     setShowPinnedDropdown(!showPinnedDropdown);
+                 }
+             }}>
+            <div className="flex items-center gap-3 overflow-hidden">
+                <div className="bg-[#e67919] p-1.5 rounded-full shrink-0">
+                    <Pin className="w-3 h-3 text-white fill-current" />
+                </div>
+                <div className="flex flex-col overflow-hidden">
+                    <span className="text-xs text-[#e67919] font-medium">
+                        {pinnedMessages[0].senderEmail === conversation.otherUserEmail ? conversation.otherUserName : "You"}
+                    </span>
+                    <span className="text-xs text-[#b8aa9d] truncate">
+                        {pinnedMessages[0].body || "Image"}
+                    </span>
+                </div>
+            </div>
+            {pinnedMessages.length > 1 && (
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-[#b8aa9d] bg-[#3a332c] px-1.5 py-0.5 rounded-full">
+                        +{pinnedMessages.length - 1}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-[#b8aa9d] transition-transform ${showPinnedDropdown ? "rotate-180" : ""}`} />
+                </div>
+            )}
+
+            {/* Pinned Messages Dropdown */}
+            {showPinnedDropdown && (
+                <div className="absolute top-full left-0 right-0 bg-[#26211c] border-b border-[#53473c] shadow-lg max-h-60 overflow-y-auto z-30">
+                    {pinnedMessages.map((msg: any) => (
+                        <div 
+                            key={msg._id}
+                            className="px-4 py-2 hover:bg-[#3a332c] cursor-pointer border-b border-[#53473c]/30 last:border-0 flex items-center gap-3"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handlePinClick(msg._id);
+                            }}
+                        >
+                            <div className="bg-[#e67919]/20 p-1.5 rounded-full shrink-0">
+                                <Pin className="w-3 h-3 text-[#e67919] fill-current" />
+                            </div>
+                            <div className="flex flex-col overflow-hidden flex-1">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs text-[#e67919] font-medium">
+                                        {msg.senderEmail === conversation.otherUserEmail ? conversation.otherUserName : "You"}
+                                    </span>
+                                    <span className="text-[10px] text-[#b8aa9d]">
+                                        {new Date(msg._creationTime).toLocaleDateString()}
+                                    </span>
+                                </div>
+                                <span className="text-xs text-[#b8aa9d] truncate">
+                                    {msg.body || "Image"}
+                                </span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+      )}
 
       {/* Messages */}
       <div

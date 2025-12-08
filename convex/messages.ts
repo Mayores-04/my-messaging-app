@@ -112,6 +112,8 @@ export const getMessagesForConversation = query({
           readByOther:
             // Only messages authored by the current user can be "read by the other"
             (m.senderEmail === identity.email) && (m._creationTime <= otherUserLastReadAt),
+          reactions: m.reactions ?? [],
+          isPinned: m.isPinned ?? false,
         }
       })
     )
@@ -223,6 +225,48 @@ export const sendMessage = mutation({
     await ctx.db.patch(args.conversationId, {
       lastMessageAt: Date.now(),
     })
+
+    // Check if we need to send a message request notification
+    const recipientEmail = conversation.user1Email === identity.email ? conversation.user2Email : conversation.user1Email;
+
+    // Check if they are friends
+    const friendship = await ctx.db
+      .query('friendships')
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('status'), 'accepted'),
+          q.or(
+            q.and(q.eq(q.field('user1Email'), identity.email), q.eq(q.field('user2Email'), recipientEmail)),
+            q.and(q.eq(q.field('user1Email'), recipientEmail), q.eq(q.field('user2Email'), identity.email))
+          )
+        )
+      )
+      .first();
+
+    if (!friendship) {
+      // Check if there is already a pending message request notification
+      const existingNotification = await ctx.db
+        .query('notifications')
+        .filter((q) =>
+          q.and(
+            q.eq(q.field('recipientEmail'), recipientEmail),
+            q.eq(q.field('senderEmail'), identity.email),
+            q.eq(q.field('type'), 'message_request')
+          )
+        )
+        .first();
+
+      if (!existingNotification) {
+        await ctx.db.insert('notifications', {
+          recipientEmail,
+          senderEmail: identity.email,
+          type: 'message_request',
+          message: 'sent you a message request',
+          read: false,
+          createdAt: Date.now(),
+        });
+      }
+    }
 
     return messageId
   },
@@ -422,5 +466,126 @@ export const getForCurrentUser = query({
       .query('messages')
       .filter((q) => q.eq(q.field('author'), identity.email))
       .collect()
+  },
+})
+
+export const getPinnedMessages = query({
+  args: {
+    conversationId: v.id('conversations'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const conversation = await ctx.db.get(args.conversationId)
+    if (!conversation) {
+      throw new Error('Conversation not found')
+    }
+
+    // Verify user is part of the conversation
+    if (
+      conversation.user1Email !== identity.email &&
+      conversation.user2Email !== identity.email
+    ) {
+      throw new Error('Unauthorized')
+    }
+
+    const messages = await ctx.db
+      .query('messages')
+      .withIndex('by_conversation', (q) => q.eq('conversationId', args.conversationId))
+      .filter((q) => q.eq(q.field('isPinned'), true))
+      .order('desc')
+      .collect()
+
+    return messages.filter(m => !m.isDeleted)
+  },
+})
+
+export const toggleReaction = mutation({
+  args: {
+    messageId: v.id('messages'),
+    emoji: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const message = await ctx.db.get(args.messageId)
+    if (!message) {
+      throw new Error('Message not found')
+    }
+
+    const reactions = message.reactions ?? []
+    const existingReactionIndex = reactions.findIndex(
+      (r: any) => r.userEmail === identity.email && r.emoji === args.emoji
+    )
+
+    if (existingReactionIndex !== -1) {
+      // Remove reaction
+      reactions.splice(existingReactionIndex, 1)
+    } else {
+      // Add reaction
+      reactions.push({
+        userEmail: identity.email!,
+        emoji: args.emoji,
+      })
+    }
+
+    await ctx.db.patch(args.messageId, { reactions })
+  },
+})
+
+export const togglePin = mutation({
+  args: {
+    messageId: v.id('messages'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const message = await ctx.db.get(args.messageId)
+    if (!message) {
+      throw new Error('Message not found')
+    }
+
+    // Verify user is part of the conversation
+    const conversation = await ctx.db.get(message.conversationId)
+    if (!conversation) {
+      throw new Error('Conversation not found')
+    }
+    if (
+      conversation.user1Email !== identity.email &&
+      conversation.user2Email !== identity.email
+    ) {
+      throw new Error('Unauthorized')
+    }
+
+    await ctx.db.patch(args.messageId, { isPinned: !message.isPinned })
+  },
+})
+
+export const reportMessage = mutation({
+  args: {
+    messageId: v.id('messages'),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    await ctx.db.insert('reports', {
+      messageId: args.messageId,
+      reporterEmail: identity.email!,
+      reason: args.reason,
+      createdAt: Date.now(),
+    })
   },
 })

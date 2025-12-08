@@ -86,3 +86,28 @@ export const getUnreadCount = query({
     return notifications.length
   },
 })
+
+// Delete a notification
+export const deleteNotification = mutation({
+  args: {
+    notificationId: v.id('notifications'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const notification = await ctx.db.get(args.notificationId)
+    if (!notification) {
+      throw new Error('Notification not found')
+    }
+
+    if (notification.recipientEmail !== identity.email) {
+      throw new Error('Unauthorized')
+    }
+
+    await ctx.db.delete(args.notificationId)
+    return { success: true }
+  },
+})
