@@ -300,7 +300,7 @@ export default function MessageInput({
         </div>
       )}
       {webCamOpen && (
-        <div className="absolute bottom-full left-0 md:left-4 right-0 md:right-auto mx-auto md:mx-0 mb-2 z-50 w-[95vw] md:w-[36rem] bg-[#181411] rounded shadow-lg p-2">
+        <div className="absolute bottom-full left-0j md:left-4 right-0 md:right-auto mx-auto md:mx-0 mb-2 z-50 w-[95vw] md:w-[36rem] bg-[#181411] rounded shadow-lg p-2">
           <div className="flex justify-end space-x-2 mb-2">
             <button
               type="button"

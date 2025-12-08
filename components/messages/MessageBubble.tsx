@@ -1,9 +1,12 @@
 import Image from "next/image";
 import { useState, memo, useCallback, useRef, useEffect } from "react";
-import { X, ChevronLeft, ChevronRight, Edit2, Trash2, Reply, MoreVertical, Smile, Pin, Flag, Forward, Eye, EyeOff, Check } from "lucide-react";
-import { useMutation, useQuery } from "convex/react";
+import { CornerUpLeft } from "lucide-react";
+import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import ForwardMessageModal from "./ForwardMessageModal";
+import MessageActions from "./MessageActions";
+import MessageContent from "./MessageContent";
+import { ConfirmModal, LightboxModal } from "./MessageModals";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 interface MessageBubbleProps {
@@ -34,11 +37,17 @@ function MessageBubble({
   const [showReportConfirm, setShowReportConfirm] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showCopied, setShowCopied] = useState(false);
   const [viewLevel, setViewLevel] = useState<0 | 1 | 2>(0); // 0: Hidden, 1: Blurred, 2: Visible
   
   const isMobile = useIsMobile();
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isLongPressing, setIsLongPressing] = useState(false);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const touchMovedRef = useRef(false);
+  const [touchTranslate, setTouchTranslate] = useState(0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   
   const editMessage = useMutation(api.messages.editMessage);
   const unsendMessage = useMutation(api.messages.unsendMessage);
@@ -94,6 +103,56 @@ function MessageBubble({
   const handleReaction = async (emoji: string) => {
     await toggleReaction({ messageId: message._id, emoji });
     setShowEmojiPicker(false);
+    setMenuOpen(false);
+  };
+
+  const handleCopyText = async () => {
+    if (!message.body) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(message.body);
+      } else {
+        // Fallback for older browsers or insecure contexts
+        const textArea = document.createElement("textarea");
+        textArea.value = message.body;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setShowCopied(true);
+      setTimeout(() => setShowCopied(false), 1600);
+      setMenuOpen(false);
+    } catch (err) {
+      console.error("Copy failed:", err);
+    }
+  };
+
+  const handleCopyImage = async () => {
+    if (!message.images || message.images.length === 0) return;
+    try {
+      const imageUrl = message.images[0];
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(imageUrl);
+      } else {
+        // Fallback for older browsers or insecure contexts
+        const textArea = document.createElement("textarea");
+        textArea.value = imageUrl;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setShowCopied(true);
+      setTimeout(() => setShowCopied(false), 1600);
+      setMenuOpen(false);
+    } catch (err) {
+      console.error("Copy image failed:", err);
+    }
   };
 
   const openLightbox = (index: number) => {
@@ -171,9 +230,13 @@ function MessageBubble({
   };
 
   // Long press handlers for mobile
-  const handleTouchStart = useCallback(() => {
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (!isMobile) return;
-    
+    const t = e.touches[0];
+    touchStartXRef.current = t.clientX;
+    touchStartYRef.current = t.clientY;
+    touchMovedRef.current = false;
+
     longPressTimerRef.current = setTimeout(() => {
       setIsLongPressing(true);
       setMenuOpen(true);
@@ -184,18 +247,107 @@ function MessageBubble({
     }, 500); // 500ms long press
   }, [isMobile]);
 
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-    setTimeout(() => setIsLongPressing(false), 100);
-  }, []);
 
-  const handleTouchMove = useCallback(() => {
+    // Detect swipe gesture (only for touch end)
+    try {
+      const t = e.changedTouches[0];
+      const startX = touchStartXRef.current;
+      const startY = touchStartYRef.current;
+      if (startX != null && startY != null) {
+        const deltaX = t.clientX - startX;
+        const deltaY = t.clientY - startY;
+        const absX = Math.abs(deltaX);
+        const absY = Math.abs(deltaY);
+        const threshold = 60; // px
+        const verticalTolerance = 40; // px
+        if (absX > threshold && absY < verticalTolerance) {
+          // left-to-right swipe: deltaX > 0
+          // right-to-left swipe: deltaX < 0
+          if (!isOwn && deltaX > threshold) {
+            // incoming message swiped left->right to reply
+            if (onReply) onReply(message);
+            else if (onReplyClick) onReplyClick(message._id);
+          } else if (isOwn && deltaX < -threshold) {
+            // own message swiped right->left to reply
+            if (onReply) onReply(message);
+            else if (onReplyClick) onReplyClick(message._id);
+          }
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+
+    setTimeout(() => setIsLongPressing(false), 100);
+    // animate back to original position (imperative style)
+    try {
+      if (containerRef.current) {
+        containerRef.current.style.transition = 'transform 180ms ease-out';
+        containerRef.current.style.transform = 'translateX(0px)';
+      }
+    } catch (err) {
+      // ignore
+    }
+    setTimeout(() => setTouchTranslate(0), 160);
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+    touchMovedRef.current = false;
+  }, [isOwn, message, onReply, onReplyClick]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
+    }
+    touchMovedRef.current = true;
+    try {
+      const t = e.touches[0];
+      const startX = touchStartXRef.current;
+      const startY = touchStartYRef.current;
+      if (startX != null && startY != null) {
+        const deltaX = t.clientX - startX;
+        const deltaY = t.clientY - startY;
+        const absX = Math.abs(deltaX);
+        const absY = Math.abs(deltaY);
+        // Only apply horizontal translate when mostly horizontal movement
+        if (absX > 6 && absY < 60) {
+          // Only allow swipe in the configured direction: incoming -> right swipe, own -> left swipe
+          const allowed = (!isOwn && deltaX > 0) || (isOwn && deltaX < 0);
+          if (!allowed) {
+            // ignore opposite-direction swipes
+            setTouchTranslate(0);
+            try {
+              if (containerRef.current) {
+                containerRef.current.style.transition = 'transform 0s';
+                containerRef.current.style.transform = `translateX(0px)`;
+              }
+            } catch (err) {
+              // ignore
+            }
+            return;
+          }
+
+          // clamp translate to reasonable bounds
+          const max = 140;
+          const clamp = Math.max(-max, Math.min(max, deltaX));
+          setTouchTranslate(clamp);
+          try {
+            if (containerRef.current) {
+              containerRef.current.style.transition = 'transform 0s';
+              containerRef.current.style.transform = `translateX(${clamp}px)`;
+            }
+          } catch (err) {
+            // ignore
+          }
+        }
+      }
+    } catch (err) {
+      // ignore
     }
   }, []);
 
@@ -210,8 +362,8 @@ function MessageBubble({
 
   if (message.isDeleted) {
     return (
-      <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"} mb-2`}>
-        <div className={`px-4 py-2 rounded-2xl border border-[#53473c] bg-[#26211c] text-[#b8aa9d] text-sm italic`}>
+      <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"} mb-1 px-2 sm:px-4 lg:px-6 xl:px-8`}>
+        <div className={`px-4 py-2 rounded-2xl border border-[#53473c] bg-[#26211c] text-[#b8aa9d] text-sm italic max-w-md`}>
           {isOwn ? "You" : conversation.otherUserName.split(' ')[0]} unsent a message
         </div>
       </div>
@@ -223,368 +375,69 @@ function MessageBubble({
       {/* Full-width hover container */}
       <div
         id={`message-${message._id}`}
-        className={`group w-full flex ${isOwn ? "justify-end" : "justify-start"} transition-colors duration-500 ${isLongPressing ? 'bg-[#2d2520]' : ''} select-none`}
-        onMouseEnter={() => !isMobile && setIsHovered(true)}
-        onMouseLeave={() => !isMobile && setIsHovered(false)}
+        className={`group relative w-full flex ${isOwn ? "justify-end" : "justify-start"} transition-colors duration-200 ${
+          isLongPressing ? 'bg-[#2d2520]' : ''
+        } px-2 sm:px-3 lg:px-4 xl:px-5 mb-1`}
+        ref={containerRef}
+        onMouseEnter={() => {
+          if (!isMobile) {
+            setIsHovered(true);
+            setMenuOpen(true);
+          }
+        }}
+        onMouseLeave={() => {
+          if (!isMobile) {
+            setIsHovered(false);
+            setMenuOpen(false);
+          }
+        }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchMove}
       >
-        <div className={`flex items-center gap-2 ${isOwn ? "flex-row" : "flex-row-reverse"}`}>
-          {/* Action Toolbar - shows on hover (desktop) or long-press (mobile) */}
-          {(isHovered || (isMobile && menuOpen)) && !isEditing && (
-            <div className="flex items-center gap-2">
-               {/* Toolbar */}
-               <div className="flex items-center gap-1 bg-[#26211c] border border-[#53473c] rounded-full px-2 py-1 shadow-lg">
-                  {/* Menu */}
-                  <div className="relative">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-                        className="text-[#b8aa9d] hover:text-white p-1.5 md:p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
-                        aria-label="More options"
-                      >
-                        <MoreVertical className="w-5 h-5 md:w-4 md:h-4" />
-                      </button>
-                      
-                      {/* Dropdown Menu - Larger touch targets for mobile */}
-                      {menuOpen && (
-                        <>
-                          {/* Backdrop for mobile */}
-                          {isMobile && (
-                            <div 
-                              className="fixed inset-0 z-40 bg-black/20"
-                              onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }}
-                            />
-                          )}
-                          <div className={`absolute ${isMobile ? 'fixed bottom-4 left-4 right-4' : 'bottom-full left-0 mb-2'} ${isMobile ? 'w-auto' : 'w-40'} bg-[#26211c] border border-[#53473c] rounded-lg shadow-xl overflow-hidden z-50 flex flex-col ${isMobile ? 'py-2' : 'py-1'}`}>
-                            {isOwn && (
-                                <>
-                                    <button onClick={(e) => { e.stopPropagation(); handleEdit(); setMenuOpen(false); }} className={`text-left ${isMobile ? 'px-6 py-3' : 'px-4 py-2'} text-sm md:text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-3 md:gap-2 w-full`}>
-                                        <Edit2 className={`${isMobile ? 'w-5 h-5' : 'w-3 h-3'}`} /> Edit
-                                    </button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleUnsend(); setMenuOpen(false); }} className={`text-left ${isMobile ? 'px-6 py-3' : 'px-4 py-2'} text-sm md:text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-3 md:gap-2 w-full`}>
-                                        <Trash2 className={`${isMobile ? 'w-5 h-5' : 'w-3 h-3'}`} /> Unsend
-                                    </button>
-                                </>
-                            )}
-                            <button onClick={(e) => { e.stopPropagation(); handleForward(); }} className={`text-left ${isMobile ? 'px-6 py-3' : 'px-4 py-2'} text-sm md:text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-3 md:gap-2 w-full`}>
-                                <Forward className={`${isMobile ? 'w-5 h-5' : 'w-3 h-3'}`} /> Forward
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); handlePin(); }} className={`text-left ${isMobile ? 'px-6 py-3' : 'px-4 py-2'} text-sm md:text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-3 md:gap-2 w-full`}>
-                                <Pin className={`${isMobile ? 'w-5 h-5' : 'w-3 h-3'}`} /> {message.isPinned ? "Unpin" : "Pin"}
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); handleReport(); }} className={`text-left ${isMobile ? 'px-6 py-3' : 'px-4 py-2'} text-sm md:text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-3 md:gap-2 w-full`}>
-                                <Flag className={`${isMobile ? 'w-5 h-5' : 'w-3 h-3'}`} /> Report
-                            </button>
-                            {isMobile && (
-                              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="text-center px-6 py-3 text-sm text-white bg-[#3a332c] hover:bg-[#4a433c] w-full mt-2">
-                                Cancel
-                              </button>
-                            )}
-                        </div>
-                        </>
-                      )}
-                  </div>
+        <div className={`flex items-center gap-2 max-w-full sm:max-w-[90%] md:max-w-[90%] lg:max-w-[85%] xl:max-w-[75%] 2xl:max-w-[70%] ${isOwn ? "flex-row" : "flex-row-reverse"}`}>
+          {/* Action Toolbar - Always reserve space to prevent layout shift */}
+          <div className={`shrink-0 transition-opacity duration-200 ${(isHovered || (isMobile && menuOpen)) && !isEditing ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+            <MessageActions
+                isOwn={isOwn}
+                isMobile={isMobile}
+                message={message}
+                menuOpen={menuOpen}
+                showEmojiPicker={showEmojiPicker}
+                showCopied={showCopied}
+                onReply={onReply}
+                onEdit={handleEdit}
+                onUnsend={handleUnsend}
+                onForward={handleForward}
+                onPin={handlePin}
+                onReport={handleReport}
+                onReaction={handleReaction}
+                onCopyText={handleCopyText}
+                onCopyImage={handleCopyImage}
+                setMenuOpen={setMenuOpen}
+                setShowEmojiPicker={setShowEmojiPicker}
+                timestamp={message.createdAt}
+            />
+          </div>
 
-                  {/* Reply - Hidden on mobile when menu is open */}
-                  {onReply && !isMobile && (
-                    <button 
-                      onClick={() => onReply(message)}
-                      className="text-[#b8aa9d] hover:text-white p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
-                      aria-label="Reply"
-                    >
-                      <Reply className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  {/* React - Hidden on mobile when menu is open */}
-                  {!isMobile && (
-                    <div className="relative">
-                      <button 
-                          onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }}
-                          className="text-[#b8aa9d] hover:text-white p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
-                          aria-label="Add reaction"
-                      >
-                          <Smile className="w-4 h-4" />
-                      </button>
-                      {showEmojiPicker && (
-                        <div className="absolute bottom-full left-0 mb-2 bg-[#26211c] border border-[#53473c] rounded-full shadow-lg p-1 flex gap-1 z-50">
-                            {["👍", "❤️", "😂", "😮", "😢", "😡"].map(emoji => (
-                                <button
-                                    key={emoji}
-                                    onClick={(e) => { e.stopPropagation(); handleReaction(emoji); }}
-                                    className="hover:bg-[#3a332c] p-1 rounded-full text-lg transition-colors"
-                                >
-                                    {emoji}
-                                </button>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-               </div>
-
-               {/* Timestamp */}
-               <span className="text-xs text-[#b8aa9d] select-none">
-                  {new Date(message.createdAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-               </span>
-            </div>
-          )}
-
-          <div className="flex flex-col">
-            <div
-              className={`relative max-w-[500px] ${
-                (!message.body && message.images && message.images.length > 0)
-                  ? "bg-transparent"
-                  : `rounded-2xl px-4 py-2 ${
-                      isOwn
-                        ? "bg-[#e67919] text-white"
-                        : "bg-[#26211c] text-white border border-[#53473c]"
-                    }`
-              }`}
-            >
-            {/* Replied Message Preview */}
-            {message.replyTo && (
-              <div 
-                className="mb-2 p-2 bg-black/20 rounded border-l-2 border-white/50 cursor-pointer hover:bg-black/30 transition-colors"
-                onClick={() => onReplyClick?.(message.replyTo._id)}
-              >
-                <p className="text-xs opacity-75 mb-1">
-                  {message.replyTo.senderEmail === message.senderEmail ? "You" : conversation.otherUserName} replied:
-                </p>
-                {message.replyTo.images && message.replyTo.images.length > 0 && (
-                  <img
-                    src={message.replyTo.images[0]}
-                    alt="Replied image"
-                    className="w-10 h-10 rounded object-cover mb-1"
-                  />
-                )}
-                <p className="text-xs opacity-90 truncate">{message.replyTo.body || "Image"}</p>
-              </div>
-            )}
-
-            {/* Pinned Indicator */}
-            {message.isPinned && (
-                <div className="absolute -top-2 -right-2 bg-[#e67919] text-white rounded-full p-1 shadow-sm z-10">
-                    <Pin className="w-3 h-3 fill-current" />
-                </div>
-            )}
-
-            {/* Reactions */}
-            {message.reactions && message.reactions.length > 0 && (
-                <div className="absolute -bottom-3 right-0 flex gap-1 bg-[#26211c] border border-[#53473c] rounded-full px-1 py-0.5 shadow-sm z-10">
-                    {Object.entries(
-                        message.reactions.reduce((acc: any, curr: any) => {
-                            acc[curr.emoji] = (acc[curr.emoji] || 0) + 1;
-                            return acc;
-                        }, {})
-                    ).map(([emoji, count]: any) => (
-                        <span key={emoji} className="text-xs px-1">
-                            {emoji} {count > 1 && <span className="text-[10px] text-[#b8aa9d] ml-0.5">{count}</span>}
-                        </span>
-                    ))}
-                </div>
-            )}
-
-          {message.images && message.images.length > 0 ? (
-            <div className="mb-2">
-              {isContentHidden ? (
-                <div className="bg-[#26211c] border border-[#53473c] rounded p-4 flex flex-col items-center justify-center gap-3 min-w-[200px]">
-                  <EyeOff className="w-8 h-8 text-[#b8aa9d]" />
-                  <p className="text-[#b8aa9d] text-sm text-center">Message Request</p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setViewLevel(1)}
-                      className="bg-[#53473c] hover:bg-[#3a332c] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
-                    >
-                      <Eye className="w-3 h-3" />
-                      Peek
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="relative">
-                  {isContentBlurred && (
-                    <div 
-                        className="absolute inset-0 z-20 flex items-center justify-center cursor-pointer"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setViewLevel(2);
-                        }}
-                    >
-                      <button
-                        className="bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-sm transition-all flex items-center gap-2 pointer-events-none"
-                      >
-                        <Eye className="w-4 h-4" />
-                        Tap to View
-                      </button>
-                    </div>
-                  )}
-                  <div className={`${isContentBlurred ? "filter blur-md select-none" : ""}`}>
-                  {message.images.length === 1 ? (
-                    <img
-                      src={message.images[0]}
-                      alt="attachment"
-                      className="w-full rounded object-cover max-h-96 cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => !isContentBlurred && openLightbox(0)}
-                    />
-                  ) : message.images.length === 2 ? (
-                    <div className="grid grid-cols-2 gap-1">
-                      {message.images.map((img: string, index: number) => (
-                        <img
-                          key={index}
-                          src={img}
-                          alt={`attachment ${index + 1}`}
-                          className="w-full rounded object-cover h-48 cursor-pointer hover:opacity-90 transition-opacity"
-                          onClick={() => !isContentBlurred && openLightbox(index)}
-                        />
-                      ))}
-                    </div>
-                  ) : message.images.length === 3 ? (
-                    <div className="grid grid-cols-2 gap-1">
-                      <img
-                        src={message.images[0]}
-                        alt="attachment 1"
-                        className="col-span-2 w-full rounded object-cover h-48 cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => !isContentBlurred && openLightbox(0)}
-                      />
-                      <img
-                        src={message.images[1]}
-                        alt="attachment 2"
-                        className="w-full rounded object-cover h-32 cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => !isContentBlurred && openLightbox(1)}
-                      />
-                      <img
-                        src={message.images[2]}
-                        alt="attachment 3"
-                        className="w-full rounded object-cover h-32 cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => !isContentBlurred && openLightbox(2)}
-                      />
-                    </div>
-                  ) : message.images.length === 4 ? (
-                    <div className="grid grid-cols-2 gap-1">
-                      {message.images.map((img: string, index: number) => (
-                        <img
-                          key={index}
-                          src={img}
-                          alt={`attachment ${index + 1}`}
-                          className="w-full rounded object-cover h-40 cursor-pointer hover:opacity-90 transition-opacity"
-                          onClick={() => !isContentBlurred && openLightbox(index)}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-1">
-                      {message.images
-                        .slice(0, 4)
-                        .map((img: string, index: number) => (
-                          <div
-                            key={index}
-                            className="relative cursor-pointer"
-                            onClick={() => !isContentBlurred && openLightbox(index)}
-                          >
-                            <img
-                              src={img}
-                              alt={`attachment ${index + 1}`}
-                              className="w-full rounded object-cover h-40 hover:opacity-90 transition-opacity"
-                            />
-                            {index === 3 && message.images.length > 4 && (
-                              <div className="absolute inset-0 bg-black/70 bg-opacity-60 rounded flex items-center justify-center">
-                                <span className="text-white text-2xl font-bold">
-                                  +{message.images.length - 4}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : null}
-          {message.body && (
-            isContentHidden ? (
-               <div className="bg-[#26211c] border border-[#53473c] rounded p-4 flex flex-col items-center justify-center gap-3 min-w-[200px]">
-                  <p className="text-[#b8aa9d] text-sm text-center">Message Request</p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setViewLevel(message.images && message.images.length > 0 ? 1 : 2)}
-                      className="bg-[#53473c] hover:bg-[#3a332c] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
-                    >
-                      <Eye className="w-3 h-3" />
-                      {message.images && message.images.length > 0 ? "Peek" : "View"}
-                    </button>
-                  </div>
-               </div>
-            ) : (
-              <div className="relative">
-                {isContentBlurred && (
-                    <div 
-                        className="absolute inset-0 z-20 flex items-center justify-center cursor-pointer"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setViewLevel(2);
-                        }}
-                    >
-                      <button
-                        className="bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-sm transition-all flex items-center gap-2 pointer-events-none"
-                      >
-                        <Eye className="w-4 h-4" />
-                        Tap to View
-                      </button>
-                    </div>
-                )}
-                <div className={`${isContentBlurred ? "filter blur-md select-none" : ""}`}>
-                {isEditing ? (
-                  <div className="flex flex-col gap-2">
-                    <input
-                      type="text"
-                      value={editedText}
-                      onChange={(e) => setEditedText(e.target.value)}
-                      onKeyDown={handleEditKeyDown}
-                      className="bg-[#26211c] text-white border border-[#53473c] rounded px-2 py-1 focus:outline-none focus:border-[#e67919]"
-                      placeholder="Edit message..."
-                      aria-label="Edit message text"
-                      autoFocus
-                    />
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={handleCancelEdit}
-                        className="text-xs px-2 py-1 rounded hover:bg-[#53473c] transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleSaveEdit}
-                        className="text-xs px-2 py-1 rounded bg-[#e67919] hover:bg-[#d56f15] transition-colors"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p className="wrap-break-word">{message.body}</p>
-                    {message.isEdited && (
-                      <span className={`text-xs italic ${
-                        isOwn ? "text-[#211811]" : "text-[#b8aa9d]"
-                      }`}>
-                        (edited)
-                      </span>
-                    )}
-                  </>
-                )}
-                </div>
-              </div>
-            )
-          )}
-          
-            </div>
+          {/* Message Content Container */}
+          <div className="flex flex-col min-w-0">
+            <MessageContent
+              message={message}
+              isOwn={isOwn}
+              isEditing={isEditing}
+              editedText={editedText}
+              isContentHidden={isContentHidden}
+              isContentBlurred={isContentBlurred}
+              conversation={conversation}
+              onReplyClick={onReplyClick}
+              onEditChange={setEditedText}
+              onSaveEdit={handleSaveEdit}
+              onCancelEdit={handleCancelEdit}
+              onEditKeyDown={handleEditKeyDown}
+              onViewLevelChange={setViewLevel}
+              onImageClick={openLightbox}
+            />
 
             {/* Show other user's avatar under the latest message they have read */}
             {isLastRead && message.readByOther && (
@@ -609,144 +462,38 @@ function MessageBubble({
         </div>
       </div>
 
-      {/* Unsend Confirmation Modal */}
-      {showUnsendConfirm && (
-        <div
-          className="fixed inset-0 bg-black/70 bg-opacity-50 z-50 flex items-center justify-center"
-          onClick={cancelUnsend}
-        >
-          <div
-            className="bg-[#26211c] border border-[#53473c] rounded-lg p-6 max-w-sm mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-white text-lg font-semibold mb-2">
-              Unsend message?
-            </h3>
-            <p className="text-[#b8aa9d] text-sm mb-6">
-              This message will be removed for everyone in the conversation.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={cancelUnsend}
-                disabled={isUnsending}
-                className="px-4 py-2 rounded bg-[#53473c] text-white hover:bg-[#6a5a4a] transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmUnsend}
-                disabled={isUnsending}
-                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                {isUnsending ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Unsending...
-                  </>
-                ) : (
-                  "Unsend"
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modals */}
+      <ConfirmModal
+        isOpen={showUnsendConfirm}
+        title="Unsend message?"
+        message="This message will be removed for everyone in the conversation."
+        confirmText="Unsend"
+        confirmAction={confirmUnsend}
+        cancelAction={cancelUnsend}
+        isLoading={isUnsending}
+        isDanger={true}
+      />
 
-      {/* Report Confirmation Modal */}
-      {showReportConfirm && (
-        <div
-          className="fixed inset-0 bg-black/70 bg-opacity-50 z-50 flex items-center justify-center"
-          onClick={() => setShowReportConfirm(false)}
-        >
-          <div
-            className="bg-[#26211c] border border-[#53473c] rounded-lg p-6 max-w-sm mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-white text-lg font-semibold mb-2">
-              Report message?
-            </h3>
-            <p className="text-[#b8aa9d] text-sm mb-6">
-              This message will be reported to admins for review.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowReportConfirm(false)}
-                className="px-4 py-2 rounded bg-[#53473c] text-white hover:bg-[#6a5a4a] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmReport}
-                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
-              >
-                Report
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={showReportConfirm}
+        title="Report message?"
+        message="This message will be reported to admins for review."
+        confirmText="Report"
+        confirmAction={confirmReport}
+        cancelAction={() => setShowReportConfirm(false)}
+        isDanger={true}
+      />
 
-      {/* Lightbox Modal */}
-      {lightboxOpen && message.images && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center"
-          onClick={() => setLightboxOpen(false)}
-          onKeyDown={handleKeyDown}
-          tabIndex={0}
-        >
-          {/* Close button */}
-          <button
-            onClick={() => setLightboxOpen(false)}
-            className="absolute top-4 right-4 text-white hover:text-[#e67919] transition-colors z-10"
-            aria-label="Close"
-          >
-            <X className="w-8 h-8" />
-          </button>
+      <LightboxModal
+        isOpen={lightboxOpen}
+        images={message.images}
+        currentIndex={currentImageIndex}
+        onClose={() => setLightboxOpen(false)}
+        onNext={nextImage}
+        onPrev={prevImage}
+        onKeyDown={handleKeyDown}
+      />
 
-          {/* Image counter */}
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black bg-opacity-50 px-3 py-1 rounded">
-            {currentImageIndex + 1} / {message.images.length}
-          </div>
-
-          {/* Previous button */}
-          {currentImageIndex > 0 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                prevImage();
-              }}
-              className="absolute left-4 text-white hover:text-[#e67919] transition-colors"
-              aria-label="Previous image"
-            >
-              <ChevronLeft className="w-12 h-12" />
-            </button>
-          )}
-
-          {/* Image */}
-          <img
-            src={message.images[currentImageIndex]}
-            alt={`Image ${currentImageIndex + 1}`}
-            className="max-w-[90vw] max-h-[90vh] object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-
-          {/* Next button */}
-          {currentImageIndex < message.images.length - 1 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                nextImage();
-              }}
-              className="absolute right-4 text-white hover:text-[#e67919] transition-colors"
-              aria-label="Next image"
-            >
-              <ChevronRight className="w-12 h-12" />
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Forward Message Modal */}
       <ForwardMessageModal
         isOpen={showForwardModal}
         onClose={() => setShowForwardModal(false)}
