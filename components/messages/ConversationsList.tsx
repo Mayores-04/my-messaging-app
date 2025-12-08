@@ -2,11 +2,25 @@
 import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation } from "convex/react";
 import Image from "next/image";
+import { useMemo, memo } from "react";
 
-export default function ConversationsList({ onSelectConversation, selectedId }: any) {
+interface ConversationsListProps {
+  onSelectConversation: (conversation: any) => void;
+  selectedId?: string;
+}
+
+function ConversationsList({ onSelectConversation, selectedId }: ConversationsListProps) {
   const conversations = useQuery(api.messages.getConversationsForCurrentUser);
   const friends = useQuery(api.friends.getFriendsForCurrentUser);
   const getOrCreateConversation = useMutation(api.messages.getOrCreateConversation);
+
+  // Memoize friends without conversations to avoid recalculation
+  const friendsWithoutConversations = useMemo(() => {
+    if (!friends || !conversations) return [];
+    return friends.filter((friend: any) => 
+      !conversations.some((conv: any) => conv.otherUserEmail === friend.email)
+    );
+  }, [friends, conversations]);
 
   const handleSelectFriend = async (friend: any) => {
     try {
@@ -69,6 +83,8 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
                     alt={conv.otherUserName}
                     width={48}
                     height={48}
+                    quality={75}
+                    loading="lazy"
                   />
                 ) : (
                   <span className="text-sm">{conv.otherUserName[0]}</span>
@@ -106,9 +122,7 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
         ))}
 
         {/* Show friends without conversations */}
-        {friends?.filter((friend: any) => 
-          !conversations.some((conv: any) => conv.otherUserEmail === friend.email)
-        ).map((friend: any) => (
+        {friendsWithoutConversations.map((friend: any) => (
           <div
             key={friend._id}
             onClick={() => handleSelectFriend(friend)}
@@ -122,6 +136,8 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
                     alt={friend.fullName ?? "user"}
                     width={48}
                     height={48}
+                    quality={75}
+                    loading="lazy"
                   />
                 ) : (
                   <span className="text-sm">
@@ -147,3 +163,4 @@ export default function ConversationsList({ onSelectConversation, selectedId }: 
   );
 }
 
+export default memo(ConversationsList);

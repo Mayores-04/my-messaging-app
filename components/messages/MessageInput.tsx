@@ -13,10 +13,12 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "../ui/button";
-import { RefObject, useRef, useEffect, useState } from "react";
+import { RefObject, useRef, useEffect, useState, lazy, Suspense } from "react";
 import React from "react";
-import EmojiPicker from "emoji-picker-react";
-import Webcam from "react-webcam";
+
+// Lazy load heavy components
+const EmojiPicker = lazy(() => import("emoji-picker-react"));
+const Webcam = lazy(() => import("react-webcam"));
 
 
 interface MessageInputProps {
@@ -286,7 +288,9 @@ export default function MessageInput({
           ref={emojiPickerRef}
           className="absolute bottom-full right-4 mb-2 z-50"
         >
-          <EmojiPicker onEmojiClick={handleEmojiSelect} />
+          <Suspense fallback={<div className="bg-[#181411] p-4 rounded">Loading...</div>}>
+            <EmojiPicker onEmojiClick={handleEmojiSelect} />
+          </Suspense>
         </div>
       )}
       {webCamOpen && (
@@ -315,13 +319,15 @@ export default function MessageInput({
             </button>
           </div>
           <div className="w-full h-96 bg-black rounded overflow-hidden relative">
-            <Webcam
-              audio={false}
-              mirrored
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              className="w-full h-full object-cover"
-            />
+            <Suspense fallback={<div className="bg-black w-full h-full flex items-center justify-center text-white">Loading camera...</div>}>
+              <Webcam
+                audio={false}
+                mirrored
+                ref={webcamRef}
+                screenshotFormat="image/jpeg"
+                className="w-full h-full object-cover"
+              />
+            </Suspense>
             {countDown > 0 && (
               <div className="absolute inset-0 flex items-center justify-center  bg-opacity-50">
                 <span className="text-white text-6xl font-bold animate-pulse">{countDown}</span>

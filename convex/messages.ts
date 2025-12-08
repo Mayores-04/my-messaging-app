@@ -49,6 +49,11 @@ export const getOrCreateConversation = mutation({
 export const getMessagesForConversation = query({
   args: {
     conversationId: v.id('conversations'),
+    paginationOpts: v.object({
+      numItems: v.number(),
+      cursor: v.union(v.string(), v.null()),
+      id: v.optional(v.number()),
+    }),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
@@ -69,14 +74,11 @@ export const getMessagesForConversation = query({
       throw new Error('Unauthorized')
     }
 
-    const messages = await ctx.db
+    const results = await ctx.db
       .query('messages')
-      .filter((q) => q.eq(q.field('conversationId'), args.conversationId))
-      .order('asc')
-      .collect()
-
-    // Filter out deleted messages
-    const activeMessages = messages.filter((m) => !m.isDeleted)
+      .withIndex('by_conversation', (q) => q.eq('conversationId', args.conversationId))
+      .order('desc')
+      .paginate(args.paginationOpts)
 
     // Determine the last-read timestamp for the OTHER user in this conversation
     const isUser1 = conversation.user1Email === identity.email
@@ -85,8 +87,8 @@ export const getMessagesForConversation = query({
       : (conversation.user1LastReadAt ?? 0)
 
     // Map messages and fetch reply data
-    const messagesWithReplies = await Promise.all(
-      activeMessages.map(async (m) => {
+    const page = await Promise.all(
+      results.page.map(async (m) => {
         let replyToMessage = null
         if (m.replyToId) {
           const repliedMsg = await ctx.db.get(m.replyToId)
@@ -108,6 +110,7 @@ export const getMessagesForConversation = query({
           images: m.images ?? undefined,
           createdAt: m._creationTime,
           isEdited: m.isEdited ?? false,
+          isDeleted: m.isDeleted ?? false,
           replyTo: replyToMessage,
           // Mark whether this message (sent by the current user) has been read by the other user
           readByOther:
@@ -117,7 +120,10 @@ export const getMessagesForConversation = query({
       })
     )
 
-    return messagesWithReplies
+    return {
+      ...results,
+      page: page.filter(m => !m.isDeleted)
+    }
   },
 })
 
@@ -246,10 +252,15 @@ export const getConversationsForCurrentUser = query({
       .order('desc')
       .collect()
 
+    // Sort and limit to 50 most recent
+    const recentConversations = conversations
+      .sort((a, b) => (b.lastMessageAt ?? b.createdAt) - (a.lastMessageAt ?? a.createdAt))
+      .slice(0, 50)
+
     const allUsers = await ctx.db.query('users').collect()
     const allMessages = await ctx.db.query('messages').collect()
 
-    return conversations.map((conv) => {
+    return recentConversations.map((conv) => {
       const isUser1 = conv.user1Email === identity.email
       const otherUserEmail = isUser1 ? conv.user2Email : conv.user1Email
       const otherUser = allUsers.find((u: any) => u.email === otherUserEmail)

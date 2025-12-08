@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { useState } from "react";
+import { useState, memo, useCallback } from "react";
 import { X, ChevronLeft, ChevronRight, Edit2, Trash2, Reply } from "lucide-react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -12,7 +12,7 @@ interface MessageBubbleProps {
   onReply?: (message: any) => void;
 }
 
-export default function MessageBubble({
+function MessageBubble({
   message,
   isOwn,
   conversation,
@@ -419,3 +419,5 @@ export default function MessageBubble({
     </>
   );
 }
+
+export default memo(MessageBubble);

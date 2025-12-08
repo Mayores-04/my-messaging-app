@@ -38,11 +38,15 @@ export default defineSchema({
     user2Email: v.string(),
     createdAt: v.number(),
     lastMessageAt: v.number(),
+    lastMessageBody: v.optional(v.string()), // Cache last message text
     user1LastReadAt: v.optional(v.number()),
     user2LastReadAt: v.optional(v.number()),
+    user1UnreadCount: v.optional(v.number()), // Cache unread count for user1
+    user2UnreadCount: v.optional(v.number()), // Cache unread count for user2
   })
     .index("by_user1", ["user1Email"])
-    .index("by_user2", ["user2Email"]),
+    .index("by_user2", ["user2Email"])
+    .index("by_lastMessageAt", ["lastMessageAt"]),
 
   messages: defineTable({
     conversationId: v.id("conversations"),

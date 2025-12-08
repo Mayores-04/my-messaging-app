@@ -1,19 +1,25 @@
 "use client";
 import { api } from "@/convex/_generated/api";
-import { useQuery, useMutation } from "convex/react";
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import VideoCallModal from "./VideoCallModal";
+import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
+import { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense, useMemo } from "react";
 import ConversationHeader from "./ConversationHeader";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
 import MessageInput from "./MessageInput";
-import IncomingCallNotification from "./IncomingCallNotification";
 import { useVideoCall } from "@/hooks/useVideoCall";
 
+// Lazy load heavy components
+const VideoCallModal = lazy(() => import("./VideoCallModal"));
+const IncomingCallNotification = lazy(() => import("./IncomingCallNotification"));
+
 export default function ConversationView({ conversation, onBack }: any) {
-  const messages = useQuery(api.messages.getMessagesForConversation, {
-    conversationId: conversation._id,
-  });
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.messages.getMessagesForConversation,
+    { conversationId: conversation._id },
+    { initialNumItems: 20 }
+  );
+
+  const messages = useMemo(() => [...results].reverse(), [results]);
 
   // Compute the latest message id that the other user has read (for read-receipt avatar)
   const lastReadMessageId = (() => {
@@ -46,7 +52,6 @@ export default function ConversationView({ conversation, onBack }: any) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoadRef = useRef(true);
-  const previousMessageCountRef = useRef(0);
 
   // Video call hook
   const {
@@ -59,42 +64,60 @@ export default function ConversationView({ conversation, onBack }: any) {
     handleCloseVideoCall,
   } = useVideoCall(conversation);
 
-  // Scroll to bottom immediately when messages load - use useLayoutEffect to avoid flash
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const previousScrollHeightRef = useRef(0);
+  const lastMessageIdRef = useRef<string | null>(null);
+
+  const handleScroll = () => {
+    if (!messagesContainerRef.current) return;
+    const { scrollTop, scrollHeight } = messagesContainerRef.current;
+    
+    if (scrollTop < 100 && status === "CanLoadMore" && !isLoadingMore) {
+        setIsLoadingMore(true);
+        previousScrollHeightRef.current = scrollHeight;
+        loadMore(20);
+    }
+  };
+
+  // Scroll management
   useLayoutEffect(() => {
-    if (messages && messages.length > 0 && messagesContainerRef.current) {
-      if (isInitialLoadRef.current) {
-        // Instant scroll to bottom on initial load, before paint
-        messagesContainerRef.current.scrollTop =
-          messagesContainerRef.current.scrollHeight;
+    if (!messagesContainerRef.current || messages.length === 0) return;
+
+    if (isInitialLoadRef.current) {
+        // Instant scroll to bottom on initial load
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
         isInitialLoadRef.current = false;
-      }
+        lastMessageIdRef.current = messages[messages.length - 1]._id;
+    } else if (isLoadingMore) {
+        // Maintain scroll position after loading more
+        const newScrollHeight = messagesContainerRef.current.scrollHeight;
+        const diff = newScrollHeight - previousScrollHeightRef.current;
+        if (diff > 0) {
+            messagesContainerRef.current.scrollTop = diff;
+        }
+        setIsLoadingMore(false);
     }
-  }, [messages]);
+  }, [messages, isLoadingMore]);
 
-  // Smooth scroll for new messages after initial load (only when messages are added, not removed)
+  // Smooth scroll for new messages
   useEffect(() => {
-    if (
-      messages &&
-      messages.length > 0 &&
-      !isInitialLoadRef.current &&
-      messagesContainerRef.current
-    ) {
-      // Only scroll if message count increased (new message added)
-      if (messages.length > previousMessageCountRef.current) {
-        messagesContainerRef.current.scrollTo({
-          top: messagesContainerRef.current.scrollHeight,
-          behavior: "smooth",
-        });
-      }
-      // Update the previous count
-      previousMessageCountRef.current = messages.length;
+    if (messages.length > 0 && !isInitialLoadRef.current && !isLoadingMore && messagesContainerRef.current) {
+        const newestMessage = messages[messages.length - 1];
+        if (newestMessage._id !== lastMessageIdRef.current) {
+            messagesContainerRef.current.scrollTo({
+                top: messagesContainerRef.current.scrollHeight,
+                behavior: "smooth",
+            });
+            lastMessageIdRef.current = newestMessage._id;
+        }
     }
-  }, [messages?.length]);
+  }, [messages, isLoadingMore]);
 
-  // Reset initial load flag and message count when conversation changes
+  // Reset initial load flag when conversation changes
   useEffect(() => {
     isInitialLoadRef.current = true;
-    previousMessageCountRef.current = 0;
+    lastMessageIdRef.current = null;
+    setIsLoadingMore(false);
   }, [conversation._id]);
 
   // Mark messages as read when conversation opens or new messages arrive
@@ -205,10 +228,16 @@ export default function ConversationView({ conversation, onBack }: any) {
       {/* Messages */}
       <div
         ref={messagesContainerRef}
+        onScroll={handleScroll}
         className="flex-1 overflow-y-auto p-4 space-y-4"
       >
-        {messages === undefined ? (
-          <div className="text-[#b8aa9d] text-center">Loading messages...</div>
+        {status === "LoadingMore" && (
+            <div className="flex justify-center py-2">
+                <div className="w-6 h-6 border-2 border-[#e67919] border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        )}
+        {status === "LoadingFirstPage" ? (
+          <div className="text-[#b8aa9d] text-center mt-10">Loading messages...</div>
         ) : messages.length === 0 ? (
           <div className="text-[#b8aa9d] text-center">
             No messages yet. Send the first message!
@@ -251,20 +280,24 @@ export default function ConversationView({ conversation, onBack }: any) {
 
       {/* Incoming Call Notification */}
       {showIncomingCall && (
-        <IncomingCallNotification
-          conversation={conversation}
-          onAccept={handleAcceptCall}
-          onReject={handleRejectCall}
-        />
+        <Suspense fallback={<div>Loading call...</div>}>
+          <IncomingCallNotification
+            conversation={conversation}
+            onAccept={handleAcceptCall}
+            onReject={handleRejectCall}
+          />
+        </Suspense>
       )}
 
       {/* Video Call Modal */}
       {isVideoCallActive && (
-        <VideoCallModal
-          conversation={conversation}
-          onClose={handleCloseVideoCall}
-          initiator={isCallInitiator}
-        />
+        <Suspense fallback={<div>Starting call...</div>}>
+          <VideoCallModal
+            conversation={conversation}
+            onClose={handleCloseVideoCall}
+            initiator={isCallInitiator}
+          />
+        </Suspense>
       )}
     </div>
   );

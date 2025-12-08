@@ -44,6 +44,8 @@ export default function Home() {
               width={560}
               height={360}
               className="rounded-xl shadow-lg object-cover"
+              priority
+              quality={85}
             />
           </div>
         </section>

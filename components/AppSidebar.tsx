@@ -3,7 +3,7 @@
 import { Archive, Bell, MessageSquare, ChevronRight } from "lucide-react";
 import { useUser, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, memo } from "react";
 import { cn } from "@/lib/utils";
 
 interface AppSidebarProps {
@@ -11,30 +11,30 @@ interface AppSidebarProps {
   toggleSidebar: () => void;
 }
 
-export function AppSidebar({ isOpen, toggleSidebar }: AppSidebarProps) {
+const sections = [
+  {
+    id: "messages",
+    label: "Messages",
+    icon: MessageSquare,
+    href: "/dashboard/messages",
+  },
+  {
+    id: "archived",
+    label: "Archived",
+    icon: Archive,
+    href: "/dashboard/archived",
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    icon: Bell,
+    href: "/dashboard/notifications",
+  },
+];
+
+function AppSidebarComponent({ isOpen, toggleSidebar }: AppSidebarProps) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const { user } = useUser();
-
-  const sections = [
-    {
-      id: "messages",
-      label: "Messages",
-      icon: MessageSquare,
-      href: "/dashboard/messages",
-    },
-    {
-      id: "archived",
-      label: "Archived",
-      icon: Archive,
-      href: "/dashboard/archived",
-    },
-    {
-      id: "notifications",
-      label: "Notifications",
-      icon: Bell,
-      href: "/dashboard/notifications",
-    },
-  ];
 
   return (
     <aside
@@ -112,3 +112,5 @@ export function AppSidebar({ isOpen, toggleSidebar }: AppSidebarProps) {
     </aside>
   );
 }
+
+export const AppSidebar = memo(AppSidebarComponent);
