@@ -209,6 +209,12 @@ export default function MessageInput({
     
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      // Quick client-side guard: prevent selecting extremely large files that would bloat the DB if uploaded as data URLs
+      const MAX_BYTES = 200 * 1024 // 200 KB
+      if (file.size > MAX_BYTES) {
+        alert(`Skipped ${file.name}: file is too large. Please choose an image under ${Math.round(MAX_BYTES/1024)}KB or upload it to external storage.`)
+        continue
+      }
       const reader = new FileReader();
       const result = await new Promise<string>((resolve) => {
         reader.onload = () => resolve(reader.result as string);
@@ -286,15 +292,15 @@ export default function MessageInput({
       {showEmojiPicker && (
         <div
           ref={emojiPickerRef}
-          className="absolute bottom-full right-4 mb-2 z-50"
+          className="absolute bottom-full right-0 md:right-4 mb-2 z-50 max-w-[100vw]"
         >
           <Suspense fallback={<div className="bg-[#181411] p-4 rounded">Loading...</div>}>
-            <EmojiPicker onEmojiClick={handleEmojiSelect} />
+            <EmojiPicker onEmojiClick={handleEmojiSelect} width={300} height={400} />
           </Suspense>
         </div>
       )}
       {webCamOpen && (
-        <div className="absolute bottom-full left-4 mb-2 z-50 w-xl bg-[#181411] rounded shadow-lg p-2">
+        <div className="absolute bottom-full left-0 md:left-4 right-0 md:right-auto mx-auto md:mx-0 mb-2 z-50 w-[95vw] md:w-[36rem] bg-[#181411] rounded shadow-lg p-2">
           <div className="flex justify-end space-x-2 mb-2">
             <button
               type="button"
@@ -338,10 +344,10 @@ export default function MessageInput({
       )}
       <form
         onSubmit={onSend}
-        className="p-4 border-t border-[#53473c] bg-[#181411]"
+        className="p-2 md:p-4 border-t border-[#53473c] bg-[#181411]"
       >
         {imagePreviews.length > 0 && (
-          <div className="mb-3">
+          <div className="mb-2 md:mb-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-[#b8aa9d]">{imagePreviews.length} image{imagePreviews.length > 1 ? 's' : ''}</span>
               <button 
@@ -377,9 +383,9 @@ export default function MessageInput({
           aria-label="Upload image"
           className="hidden"
         />
-        <div ref={containerRef} className="flex gap-2 items-center">
-          <PlusCircle onClick={onToggleEmojiPicker} className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer" />
-          <div className="flex-1 px-2 flex items-center bg-[#211811] text-white placeholder-[#b8aa9d] rounded-lg focus-within:ring-2 focus-within:ring-[#e67919]">
+        <div ref={containerRef} className="flex gap-1.5 md:gap-2 items-center">
+          <PlusCircle onClick={onToggleEmojiPicker} className="w-5 h-5 md:w-6 md:h-6 text-white hover:text-[#e67919] cursor-pointer" />
+          <div className="flex-1 px-2 py-1 md:py-0 flex items-center bg-[#211811] text-white placeholder-[#b8aa9d] rounded-lg focus-within:ring-2 focus-within:ring-[#e67919]">
             <input
               ref={inputRef}
               autoFocus
@@ -392,20 +398,20 @@ export default function MessageInput({
             />
             <SmileIcon
               onClick={onToggleEmojiPicker}
-              className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer"
+              className="w-5 h-5 md:w-6 md:h-6 text-white hover:text-[#e67919] cursor-pointer"
             />
           </div>
           <ImageIcon
             onClick={() => fileInputRef.current && fileInputRef.current.click()}
-            className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer"
+            className="w-5 h-5 md:w-6 md:h-6 text-white hover:text-[#e67919] cursor-pointer"
           />
-          <CameraIcon onClick={() => setWebCamOpen(!webCamOpen)} className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer" />
+          <CameraIcon onClick={() => setWebCamOpen(!webCamOpen)} className="w-5 h-5 md:w-6 md:h-6 text-white hover:text-[#e67919] cursor-pointer" />
           <Button
             type="submit"
             disabled={(!messageText.trim() && imagePreviews.length === 0) || sending}
-            className="bg-[#e67919] hover:bg-[#cf6213] disabled:bg-[#53473c] text-white rounded-lg px-4 py-2 transition-colors"
+            className="bg-[#e67919] hover:bg-[#cf6213] disabled:bg-[#53473c] text-white rounded-lg px-2 py-1.5 md:px-4 md:py-2 transition-colors"
           >
-            <Send className="w-5 h-5" />
+            <Send className="w-4 h-4 md:w-5 md:h-5" />
           </Button>
         </div>
       </form>

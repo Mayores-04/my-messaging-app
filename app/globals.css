@@ -15,6 +15,25 @@ button{
   cursor: pointer;
 }
 
+/* Prevent text selection on mobile to avoid copy/paste menu when long-pressing */
+@media (max-width: 768px) {
+  * {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  
+  /* Allow selection only in input fields */
+  input, textarea {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -156,4 +175,32 @@ button{
 .typing-dot-3 {
   animation: typing-bounce 1.4s infinite ease-in-out;
   animation-delay: 0.4s;
+}
+
+/* Make Clerk UserButton dropdown more accessible on mobile */
+@media (max-width: 768px) {
+  /* Increase touch target size for UserButton dropdown items */
+  [class*="cl-userButtonPopoverActionButton"] {
+    min-height: 48px !important;
+    padding: 12px 16px !important;
+    font-size: 16px !important;
+  }
+  
+  /* Make the dropdown card wider and properly positioned */
+  [class*="cl-userButtonPopoverCard"] {
+    min-width: 240px !important;
+    max-width: calc(100vw - 32px) !important;
+  }
+  
+  /* Ensure proper spacing between items */
+  [class*="cl-userButtonPopoverActions"] {
+    gap: 8px !important;
+  }
+  
+  /* Make footer items larger */
+  [class*="cl-userButtonPopoverFooter"] button {
+    min-height: 48px !important;
+    padding: 12px 16px !important;
+    font-size: 16px !important;
+  }
 }

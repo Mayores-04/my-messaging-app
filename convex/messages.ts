@@ -229,6 +229,21 @@ export const sendMessage = mutation({
     }
 
     // Insert message
+    // Quick server-side guard: reject large data-URL images to avoid storing blobs in Convex.
+    if (args.images && args.images.length > 0) {
+      for (const img of args.images) {
+        if (typeof img === 'string' && img.startsWith('data:')) {
+          // Estimate decoded byte size from base64 length (rough estimate)
+          const commaIndex = img.indexOf(',')
+          const base64Part = commaIndex !== -1 ? img.slice(commaIndex + 1) : img
+          const estimatedBytes = Math.ceil((base64Part.length * 3) / 4)
+          const MAX_BYTES = 50 * 1024 // 50 KB per image recommended
+          if (estimatedBytes > MAX_BYTES) {
+            throw new Error('Image too large to store in database. Upload to external storage and provide a URL instead.')
+          }
+        }
+      }
+    }
     const messageId = await ctx.db.insert('messages', {
       conversationId: args.conversationId,
       senderEmail: identity.email,
@@ -314,52 +329,70 @@ export const getConversationsForCurrentUser = query({
       .sort((a, b) => (b.lastMessageAt ?? b.createdAt) - (a.lastMessageAt ?? a.createdAt))
       .slice(0, 50)
 
-    const allUsers = await ctx.db.query('users').collect()
-    const allMessages = await ctx.db.query('messages').collect()
+    // For each recent conversation, fetch only needed data (other user and last message)
+    const results = await Promise.all(
+      recentConversations.map(async (conv) => {
+        const isUser1 = conv.user1Email === identity.email
+        const otherUserEmail = isUser1 ? conv.user2Email : conv.user1Email
 
-    return recentConversations.map((conv) => {
-      const isUser1 = conv.user1Email === identity.email
-      const otherUserEmail = isUser1 ? conv.user2Email : conv.user1Email
-      const otherUser = allUsers.find((u: any) => u.email === otherUserEmail)
+        // Fetch other user by indexed query (efficient)
+        const otherUser = await ctx.db
+          .query('users')
+          .withIndex('by_email', (q) => q.eq('email', otherUserEmail))
+          .first()
 
-      // Get last message for this conversation
-      const convMessages = allMessages
-        .filter((m: any) => m.conversationId === conv._id)
-        .sort((a, b) => b._creationTime - a._creationTime)
-      const lastMessage = convMessages[0]
+        // Fetch the most recent message for this conversation using the conversation index
+        const lastMessage = await ctx.db
+          .query('messages')
+          .withIndex('by_conversation', (q) => q.eq('conversationId', conv._id))
+          .order('desc')
+          .first()
 
-      // Calculate unread count - messages sent by other user after my last read
-      const lastReadAt = isUser1 ? (conv.user1LastReadAt ?? 0) : (conv.user2LastReadAt ?? 0)
-      const unreadCount = convMessages.filter(
-        (m: any) => m.senderEmail === otherUserEmail && m._creationTime > lastReadAt && !m.isDeleted
-      ).length
+        // Compute unread count by targeted query (messages from other user, after last read)
+        const lastReadAt = isUser1 ? (conv.user1LastReadAt ?? 0) : (conv.user2LastReadAt ?? 0)
+        const unreadMessages = await ctx.db
+          .query('messages')
+          .withIndex('by_conversation', (q) => q.eq('conversationId', conv._id))
+          .filter((q) =>
+            q.and(
+              q.eq(q.field('senderEmail'), otherUserEmail),
+              q.gt(q.field('createdAt'), lastReadAt),
+              q.eq(q.field('isDeleted'), false)
+            )
+          )
+          .collect()
 
-      // Check if user is online (active within last 5 minutes)
-      const isOnline = otherUser?.lastActive ? (Date.now() - otherUser.lastActive) < 5 * 60 * 1000 : false
+        const unreadCount = unreadMessages.length
 
-      let lastMessagePreview = 'No messages yet'
-      if (lastMessage) {
-        if (lastMessage.isDeleted) {
-          lastMessagePreview = lastMessage.senderEmail === identity.email ? 'You unsent a message' : 'Message unsent'
-        } else if (lastMessage.images && lastMessage.images.length > 0) {
-          lastMessagePreview = 'Sent an image'
-        } else {
-          lastMessagePreview = lastMessage.body
+        // Check if user is online (active within last 5 minutes)
+        const isOnline = otherUser?.lastActive ? (Date.now() - otherUser.lastActive) < 5 * 60 * 1000 : false
+
+        let lastMessagePreview = 'No messages yet'
+        if (lastMessage) {
+          if (lastMessage.isDeleted) {
+            lastMessagePreview = lastMessage.senderEmail === identity.email ? 'You unsent a message' : 'Message unsent'
+          } else if (lastMessage.images && lastMessage.images.length > 0) {
+            lastMessagePreview = 'Sent an image'
+          } else {
+            lastMessagePreview = lastMessage.body
+          }
         }
-      }
 
-      return {
-        _id: conv._id,
-        otherUserEmail,
-        otherUserName: otherUser?.fullName ?? otherUser?.firstName ?? otherUserEmail,
-        otherUserAvatar: otherUser?.avatarUrl ?? null,
-        lastMessage: lastMessagePreview,
-        lastMessageAt: conv.lastMessageAt ?? conv.createdAt,
-        unreadCount,
-        isOnline,
-        acceptedBy: conv.acceptedBy,
-      }
-    })
+        return {
+          _id: conv._id,
+          otherUserEmail,
+          otherUserName: otherUser?.fullName ?? otherUser?.firstName ?? otherUserEmail,
+          otherUserAvatar: otherUser?.avatarUrl ?? null,
+          lastMessage: lastMessagePreview,
+          lastMessageAt: conv.lastMessageAt ?? conv.createdAt,
+          unreadCount,
+          isOnline,
+          acceptedBy: conv.acceptedBy,
+        }
+      })
+    )
+
+    return results
   },
 })
 

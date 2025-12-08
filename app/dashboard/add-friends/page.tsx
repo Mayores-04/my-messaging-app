@@ -95,8 +95,8 @@ export default function AddFriendsPage() {
               key={user._id}
               className="flex items-center justify-between p-4 bg-[#211811] rounded-lg border border-[#53473c] hover:border-[#e67919] transition-colors"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
+              <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
+                <div className="w-12 h-12 rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold shrink-0">
                   {user.avatarUrl ? (
                     <Image
                       src={user.avatarUrl}
@@ -110,11 +110,11 @@ export default function AddFriendsPage() {
                     </span>
                   )}
                 </div>
-                <div>
-                  <p className="text-white font-medium">
+                <div className="min-w-0">
+                  <p className="text-white font-medium truncate">
                     {user.fullName || user.firstName || "Unknown"}
                   </p>
-                  <p className="text-[#b8aa9d] text-sm">{user.email}</p>
+                  <p className="text-[#b8aa9d] text-sm truncate">{user.email}</p>
                 </div>
               </div>
 
@@ -162,7 +162,7 @@ export default function AddFriendsPage() {
           <h2 className="text-xl font-semibold text-white mb-4">
             Your Friends ({currentFriends.length})
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {currentFriends.map((friend: any) => (
               <div
                 key={friend._id}

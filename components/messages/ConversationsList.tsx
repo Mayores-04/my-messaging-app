@@ -55,11 +55,11 @@ function ConversationsList({ onSelectConversation, selectedId }: ConversationsLi
 
   return (
     <div className="w-full h-full flex flex-col rounded-lg">
-      <h1 className="text-3xl font-bold text-white mb-4">Messages</h1>
-      <div className="mb-3">
+      <h1 className="text-2xl md:text-3xl font-bold text-white mb-3 md:mb-4">Messages</h1>
+      <div className="mb-2 md:mb-3">
         <input
           placeholder="Search conversations..."
-          className="w-full bg-[#211811] placeholder-[#b8aa9d] text-white rounded-md px-3 py-2 focus:outline-none"
+          className="w-full bg-[#211811] placeholder-[#b8aa9d] text-white rounded-md px-2 py-1.5 md:px-3 md:py-2 text-sm md:text-base focus:outline-none"
         />
       </div>
 
@@ -69,7 +69,7 @@ function ConversationsList({ onSelectConversation, selectedId }: ConversationsLi
           <div
             key={conv._id}
             onClick={() => onSelectConversation(conv)}
-            className={`flex items-center gap-3 p-3 rounded-lg hover:bg-[#2d2520] cursor-pointer transition-colors border-2 ${
+            className={`flex items-center gap-2 md:gap-3 p-2 md:p-3 rounded-lg hover:bg-[#2d2520] cursor-pointer transition-colors border-2 ${
               selectedId === conv._id 
                 ? 'bg-[#2d2520] border-transparent' 
                 : conv.unreadCount > 0
@@ -77,8 +77,8 @@ function ConversationsList({ onSelectConversation, selectedId }: ConversationsLi
                   : 'bg-[#181411] border-transparent'
             }`}
           >
-            <div className="relative w-12 h-12">
-              <div className="rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
+            <div className="relative w-11 h-11 md:w-12 md:h-12 shrink-0">
+              <div className="w-full h-full rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
                 {conv.otherUserAvatar ? (
                   <Image
                     src={conv.otherUserAvatar}
@@ -132,8 +132,8 @@ function ConversationsList({ onSelectConversation, selectedId }: ConversationsLi
             onClick={() => handleSelectFriend(friend)}
             className="flex items-center gap-3 p-3 bg-[#211811] rounded-lg hover:bg-[#2d2520] cursor-pointer transition-colors border border-[#53473c]"
           >
-            <div className="relative w-12 h-12">
-              <div className="w-12 h-12 rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
+            <div className="relative w-11 h-11 md:w-12 md:h-12 shrink-0">
+              <div className="w-full h-full rounded-full overflow-hidden bg-[#53473c] flex items-center justify-center text-white font-semibold">
                 {friend.avatarUrl ? (
                   <Image
                     src={friend.avatarUrl}

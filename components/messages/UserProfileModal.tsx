@@ -34,7 +34,7 @@ export default function UserProfileModal({ isOpen, onClose, user }: UserProfileM
 
         {/* Avatar */}
         <div className="relative px-6 pb-6">
-          <div className="absolute -top-30 left-1/2 -translate-x-1/2 p-1 bg-[#26211c] rounded-full">
+          <div className="absolute -top-12 left-1/2 -translate-x-1/2 p-1 bg-[#26211c] rounded-full">
             <div className="w-24 h-24 rounded-full overflow-hidden bg-[#181411] flex items-center justify-center border-2 border-[#53473c]">
               {user.avatar ? (
                 <Image
@@ -51,7 +51,7 @@ export default function UserProfileModal({ isOpen, onClose, user }: UserProfileM
           </div>
 
           {/* Info */}
-          <div className="mt-16 space-y-4 text-center">
+          <div className="mt-14 space-y-4 text-center">
             <div>
               <h2 className="text-xl font-bold text-white">{user.name}</h2>
               <p className="text-[#b8aa9d] text-sm flex items-center justify-center gap-1 mt-1">

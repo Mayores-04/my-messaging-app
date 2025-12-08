@@ -57,6 +57,7 @@ export default function ConversationView({ conversation, onBack }: any) {
   const [replyTo, setReplyTo] = useState<any>(null);
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isTypingLocalRef = useRef(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoadRef = useRef(true);
@@ -139,11 +140,14 @@ export default function ConversationView({ conversation, onBack }: any) {
   const handleTyping = (text: string) => {
     setMessageText(text);
 
-    // Set typing to true
-    setTypingStatus({
-      conversationId: activeConversation._id,
-      isTyping: true,
-    });
+    // Only send a "typing=true" update when the local typing state transitions
+    if (!isTypingLocalRef.current) {
+      isTypingLocalRef.current = true;
+      setTypingStatus({
+        conversationId: activeConversation._id,
+        isTyping: true,
+      });
+    }
 
     // Clear previous timeout
     if (typingTimeoutRef.current) {
@@ -152,6 +156,7 @@ export default function ConversationView({ conversation, onBack }: any) {
 
     // Set typing to false after 2 seconds of inactivity
     typingTimeoutRef.current = setTimeout(() => {
+      isTypingLocalRef.current = false;
       setTypingStatus({
         conversationId: conversation._id,
         isTyping: false,
@@ -210,6 +215,7 @@ export default function ConversationView({ conversation, onBack }: any) {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
+      isTypingLocalRef.current = false;
       setTypingStatus({
         conversationId: conversation._id,
         isTyping: false,

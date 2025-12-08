@@ -46,19 +46,21 @@ export default function ConversationHeader({
 
   return (
     <>
-      <div className="flex items-center gap-3 p-4 border-b border-[#53473c] bg-[#181411]">
-        <div className="flex flex-row w-full gap-3 items-center">
+      <div className="flex items-center justify-between gap-1.5 md:gap-2 p-2 md:p-4 border-b border-[#53473c] bg-[#181411]">
+        <div className="flex items-center gap-1.5 md:gap-3 flex-1 min-w-0">
           <Button
             onClick={onBack}
-            className="md:hidden text-white hover:text-[#e67919]"
+            variant="ghost"
+            size="icon"
+            className="md:hidden text-white hover:text-[#e67919] shrink-0 h-8 w-8 p-0"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
           </Button>
           <div 
-            className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+            className="flex items-center gap-1.5 md:gap-3 cursor-pointer hover:opacity-80 transition-opacity flex-1 min-w-0"
             onClick={() => setShowProfile(true)}
           >
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-[#181411] flex items-center justify-center text-white font-semibold">
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-full overflow-hidden bg-[#181411] flex items-center justify-center text-white font-semibold shrink-0">
               {conversation.otherUserAvatar ? (
                 <Image
                   src={conversation.otherUserAvatar}
@@ -67,14 +69,14 @@ export default function ConversationHeader({
                   height={40}
                 />
               ) : (
-                <span className="text-sm">{conversation.otherUserName[0]}</span>
+                <span className="text-xs md:text-sm">{conversation.otherUserName[0]}</span>
               )}
             </div>
-            <div>
-              <h2 className="text-white font-semibold">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-white font-semibold text-sm md:text-base truncate">
                 {conversation.otherUserName}
               </h2>
-              <p className="text-[#b8aa9d] text-xs">
+              <p className="text-[#b8aa9d] text-xs truncate">
                 {isTyping
                   ? "typing..."
                   : userStatus?.isOnline
@@ -84,39 +86,39 @@ export default function ConversationHeader({
             </div>
           </div>
         </div>
-        <div className="flex flex-row items-center gap-4">
+        <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
           {isRestricted ? (
             <>
               <button
                 onClick={handleDelete}
-                className="text-red-500 hover:text-red-400 flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-500/10 hover:bg-red-500/20 transition-colors text-sm font-medium"
+                className="text-red-500 hover:text-red-400 flex items-center gap-1 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-red-500/10 hover:bg-red-500/20 transition-colors text-xs md:text-sm font-medium"
               >
-                <Trash2 className="w-4 h-4" />
-                Delete
+                <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">Delete</span>
               </button>
               <button
                 onClick={handleAccept}
-                className="text-[#e67919] hover:text-[#cf6213] flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#e67919]/10 hover:bg-[#e67919]/20 transition-colors text-sm font-medium"
+                className="text-[#e67919] hover:text-[#cf6213] flex items-center gap-1 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-[#e67919]/10 hover:bg-[#e67919]/20 transition-colors text-xs md:text-sm font-medium"
               >
-                <Check className="w-4 h-4" />
-                Accept
+                <Check className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">Accept</span>
               </button>
             </>
           ) : (
             <>
               {canCall && (
                 <>
-                  <PhoneCall className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer" />
+                  <PhoneCall className="w-4 h-4 md:w-5 md:h-5 text-white hover:text-[#e67919] cursor-pointer" />
                   <VideoIcon
                     onClick={onVideoCall}
-                    className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer"
+                    className="w-4 h-4 md:w-5 md:h-5 text-white hover:text-[#e67919] cursor-pointer"
                   />
                 </>
               )}
-              <MenuIcon 
+              {/* <MenuIcon 
                 onClick={() => setShowProfile(true)}
-                className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer" 
-              />
+                className="w-4 h-4 md:w-5 md:h-5 text-white hover:text-[#e67919] cursor-pointer" 
+              /> */}
             </>
           )}
         </div>

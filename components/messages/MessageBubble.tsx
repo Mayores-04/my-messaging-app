@@ -1,9 +1,10 @@
 import Image from "next/image";
-import { useState, memo, useCallback } from "react";
+import { useState, memo, useCallback, useRef, useEffect } from "react";
 import { X, ChevronLeft, ChevronRight, Edit2, Trash2, Reply, MoreVertical, Smile, Pin, Flag, Forward, Eye, EyeOff, Check } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import ForwardMessageModal from "./ForwardMessageModal";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface MessageBubbleProps {
   message: any;
@@ -34,6 +35,10 @@ function MessageBubble({
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [viewLevel, setViewLevel] = useState<0 | 1 | 2>(0); // 0: Hidden, 1: Blurred, 2: Visible
+  
+  const isMobile = useIsMobile();
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isLongPressing, setIsLongPressing] = useState(false);
   
   const editMessage = useMutation(api.messages.editMessage);
   const unsendMessage = useMutation(api.messages.unsendMessage);
@@ -165,6 +170,44 @@ function MessageBubble({
     }
   };
 
+  // Long press handlers for mobile
+  const handleTouchStart = useCallback(() => {
+    if (!isMobile) return;
+    
+    longPressTimerRef.current = setTimeout(() => {
+      setIsLongPressing(true);
+      setMenuOpen(true);
+      // Haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500); // 500ms long press
+  }, [isMobile]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    setTimeout(() => setIsLongPressing(false), 100);
+  }, []);
+
+  const handleTouchMove = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+      }
+    };
+  }, []);
+
   if (message.isDeleted) {
     return (
       <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"} mb-2`}>
@@ -180,54 +223,71 @@ function MessageBubble({
       {/* Full-width hover container */}
       <div
         id={`message-${message._id}`}
-        className={`group w-full flex ${isOwn ? "justify-end" : "justify-start"} transition-colors duration-500`}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        className={`group w-full flex ${isOwn ? "justify-end" : "justify-start"} transition-colors duration-500 ${isLongPressing ? 'bg-[#2d2520]' : ''} select-none`}
+        onMouseEnter={() => !isMobile && setIsHovered(true)}
+        onMouseLeave={() => !isMobile && setIsHovered(false)}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchMove={handleTouchMove}
       >
         <div className={`flex items-center gap-2 ${isOwn ? "flex-row" : "flex-row-reverse"}`}>
-          {/* Action Toolbar - shows on hover */}
-          {isHovered && (
+          {/* Action Toolbar - shows on hover (desktop) or long-press (mobile) */}
+          {(isHovered || (isMobile && menuOpen)) && !isEditing && (
             <div className="flex items-center gap-2">
                {/* Toolbar */}
-               <div className="flex items-center gap-1 bg-[#26211c] border border-[#53473c] rounded-full px-2 py-1">
+               <div className="flex items-center gap-1 bg-[#26211c] border border-[#53473c] rounded-full px-2 py-1 shadow-lg">
                   {/* Menu */}
                   <div className="relative">
                       <button 
                         onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-                        className="text-[#b8aa9d] hover:text-white p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
+                        className="text-[#b8aa9d] hover:text-white p-1.5 md:p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
                         aria-label="More options"
                       >
-                        <MoreVertical className="w-4 h-4" />
+                        <MoreVertical className="w-5 h-5 md:w-4 md:h-4" />
                       </button>
                       
-                      {/* Dropdown Menu */}
+                      {/* Dropdown Menu - Larger touch targets for mobile */}
                       {menuOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 w-32 bg-[#26211c] border border-[#53473c] rounded-lg shadow-lg overflow-hidden z-50 flex flex-col py-1">
+                        <>
+                          {/* Backdrop for mobile */}
+                          {isMobile && (
+                            <div 
+                              className="fixed inset-0 z-40 bg-black/20"
+                              onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }}
+                            />
+                          )}
+                          <div className={`absolute ${isMobile ? 'fixed bottom-4 left-4 right-4' : 'bottom-full left-0 mb-2'} ${isMobile ? 'w-auto' : 'w-40'} bg-[#26211c] border border-[#53473c] rounded-lg shadow-xl overflow-hidden z-50 flex flex-col ${isMobile ? 'py-2' : 'py-1'}`}>
                             {isOwn && (
                                 <>
-                                    <button onClick={(e) => { e.stopPropagation(); handleEdit(); setMenuOpen(false); }} className="text-left px-4 py-2 text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-2 w-full">
-                                        <Edit2 className="w-3 h-3" /> Edit
+                                    <button onClick={(e) => { e.stopPropagation(); handleEdit(); setMenuOpen(false); }} className={`text-left ${isMobile ? 'px-6 py-3' : 'px-4 py-2'} text-sm md:text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-3 md:gap-2 w-full`}>
+                                        <Edit2 className={`${isMobile ? 'w-5 h-5' : 'w-3 h-3'}`} /> Edit
                                     </button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleUnsend(); setMenuOpen(false); }} className="text-left px-4 py-2 text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-2 w-full">
-                                        <Trash2 className="w-3 h-3" /> Unsend
+                                    <button onClick={(e) => { e.stopPropagation(); handleUnsend(); setMenuOpen(false); }} className={`text-left ${isMobile ? 'px-6 py-3' : 'px-4 py-2'} text-sm md:text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-3 md:gap-2 w-full`}>
+                                        <Trash2 className={`${isMobile ? 'w-5 h-5' : 'w-3 h-3'}`} /> Unsend
                                     </button>
                                 </>
                             )}
-                            <button onClick={(e) => { e.stopPropagation(); handleForward(); }} className="text-left px-4 py-2 text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-2 w-full">
-                                <Forward className="w-3 h-3" /> Forward
+                            <button onClick={(e) => { e.stopPropagation(); handleForward(); }} className={`text-left ${isMobile ? 'px-6 py-3' : 'px-4 py-2'} text-sm md:text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-3 md:gap-2 w-full`}>
+                                <Forward className={`${isMobile ? 'w-5 h-5' : 'w-3 h-3'}`} /> Forward
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); handlePin(); }} className="text-left px-4 py-2 text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-2 w-full">
-                                <Pin className="w-3 h-3" /> {message.isPinned ? "Unpin" : "Pin"}
+                            <button onClick={(e) => { e.stopPropagation(); handlePin(); }} className={`text-left ${isMobile ? 'px-6 py-3' : 'px-4 py-2'} text-sm md:text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-3 md:gap-2 w-full`}>
+                                <Pin className={`${isMobile ? 'w-5 h-5' : 'w-3 h-3'}`} /> {message.isPinned ? "Unpin" : "Pin"}
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); handleReport(); }} className="text-left px-4 py-2 text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-2 w-full">
-                                <Flag className="w-3 h-3" /> Report
+                            <button onClick={(e) => { e.stopPropagation(); handleReport(); }} className={`text-left ${isMobile ? 'px-6 py-3' : 'px-4 py-2'} text-sm md:text-xs text-[#b8aa9d] hover:bg-[#3a332c] hover:text-white flex items-center gap-3 md:gap-2 w-full`}>
+                                <Flag className={`${isMobile ? 'w-5 h-5' : 'w-3 h-3'}`} /> Report
                             </button>
+                            {isMobile && (
+                              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} className="text-center px-6 py-3 text-sm text-white bg-[#3a332c] hover:bg-[#4a433c] w-full mt-2">
+                                Cancel
+                              </button>
+                            )}
                         </div>
+                        </>
                       )}
                   </div>
 
-                  {/* Reply */}
-                  {onReply && (
+                  {/* Reply - Hidden on mobile when menu is open */}
+                  {onReply && !isMobile && (
                     <button 
                       onClick={() => onReply(message)}
                       className="text-[#b8aa9d] hover:text-white p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
@@ -237,16 +297,17 @@ function MessageBubble({
                     </button>
                   )}
 
-                  {/* React */}
-                  <div className="relative">
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }}
-                        className="text-[#b8aa9d] hover:text-white p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
-                        aria-label="Add reaction"
-                    >
-                        <Smile className="w-4 h-4" />
-                    </button>
-                    {showEmojiPicker && (
+                  {/* React - Hidden on mobile when menu is open */}
+                  {!isMobile && (
+                    <div className="relative">
+                      <button 
+                          onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }}
+                          className="text-[#b8aa9d] hover:text-white p-1 rounded-full hover:bg-[#3a332c] transition-colors flex items-center justify-center"
+                          aria-label="Add reaction"
+                      >
+                          <Smile className="w-4 h-4" />
+                      </button>
+                      {showEmojiPicker && (
                         <div className="absolute bottom-full left-0 mb-2 bg-[#26211c] border border-[#53473c] rounded-full shadow-lg p-1 flex gap-1 z-50">
                             {["👍", "❤️", "😂", "😮", "😢", "😡"].map(emoji => (
                                 <button
@@ -258,8 +319,9 @@ function MessageBubble({
                                 </button>
                             ))}
                         </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
                </div>
 
                {/* Timestamp */}

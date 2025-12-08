@@ -689,10 +689,10 @@ export default function VideoCallModal({
       </div>
 
       {/* Video Grid */}
-      <div className="flex-1 relative flex items-center justify-center p-4">
+      <div className="flex-1 relative flex items-center justify-center p-0 md:p-4">
         {/* Debug Info */}
         {process.env.NODE_ENV === 'development' && (
-          <div className="absolute top-4 left-4 bg-black bg-opacity-75 text-white text-xs p-2 rounded z-10">
+          <div className="absolute top-4 left-4 bg-black bg-opacity-75 text-white text-xs p-2 rounded z-10 hidden md:block">
             <div>Local Stream (YOU): {localStream ? '✓' : '✗'}</div>
             <div>Remote Stream (THEM): {remoteStream ? '✓' : '✗'}</div>
             <div>Peer: {peer && !peer.destroyed ? '✓' : '✗'}</div>
@@ -702,7 +702,7 @@ export default function VideoCallModal({
         )}
         
         {/* Remote Video (Large) - Shows the OTHER person's camera */}
-        <div className="relative w-full h-full max-w-6xl max-h-[80vh] bg-[#26211c] rounded-lg overflow-hidden">
+        <div className="relative w-full h-full md:max-w-6xl md:max-h-[80vh] bg-[#26211c] md:rounded-lg overflow-hidden">
           {remoteStream ? (
             <>
               <video
@@ -725,7 +725,7 @@ export default function VideoCallModal({
           )}
 
           {/* Local Video (Small PIP) */}
-          <div className="absolute bottom-4 right-4 w-48 h-36 bg-[#181411] rounded-lg overflow-hidden shadow-lg border-2 border-[#53473c]">
+          <div className="absolute bottom-4 right-4 w-32 h-24 md:w-48 md:h-36 bg-[#181411] rounded-lg overflow-hidden shadow-lg border-2 border-[#53473c]">
             {localStream && isVideoEnabled ? (
               <video
                 key="local-video"
@@ -737,7 +737,7 @@ export default function VideoCallModal({
               />
             ) : (
               <div className="flex items-center justify-center w-full h-full bg-[#26211c]">
-                <VideoOffIcon className="w-12 h-12 text-[#b8aa9d]" />
+                <VideoOffIcon className="w-8 h-8 md:w-12 md:h-12 text-[#b8aa9d]" />
               </div>
             )}
           </div>
