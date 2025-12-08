@@ -39,6 +39,7 @@ export default function ConversationView({ conversation, onBack }: any) {
 
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
+  const [images, setImages] = useState<string[]>([]);
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -118,9 +119,9 @@ export default function ConversationView({ conversation, onBack }: any) {
     }, 2000);
   };
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!messageText.trim() || sending) return;
+  const handleSend = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if ((!messageText.trim() && images.length === 0) || sending) return;
 
     // Clear typing indicator immediately
     if (typingTimeoutRef.current) {
@@ -136,8 +137,10 @@ export default function ConversationView({ conversation, onBack }: any) {
       await sendMessage({
         conversationId: conversation._id,
         body: messageText.trim(),
+        images: images.length > 0 ? images : undefined,
       });
       setMessageText("");
+      setImages([]);
       // Keep focus on the input so the user can continue typing
       try {
         // small delay to ensure React has updated the value
@@ -171,6 +174,12 @@ export default function ConversationView({ conversation, onBack }: any) {
       });
     };
   }, [conversation._id, setTypingStatus]);
+
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+  const handleEmojiClick = (emojiData: any) => {
+    setMessageText((prev) => prev + emojiData.emoji);
+  };
 
   return (
     <div className="flex flex-col h-screen w-full">
@@ -220,6 +229,11 @@ export default function ConversationView({ conversation, onBack }: any) {
         inputRef={inputRef}
         onTyping={handleTyping}
         onSend={handleSend}
+        onToggleEmojiPicker={() => setShowEmojiPicker(!showEmojiPicker)}
+        showEmojiPicker={showEmojiPicker}
+        onEmojiClick={handleEmojiClick}
+        images={images}
+        onImagesChange={setImages}
       />
 
       {/* Incoming Call Notification */}

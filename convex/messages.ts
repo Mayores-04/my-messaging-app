@@ -86,6 +86,7 @@ export const getMessagesForConversation = query({
       conversationId: m.conversationId,
       senderEmail: m.senderEmail,
       body: m.body,
+      images: m.images ?? undefined,
       createdAt: m._creationTime,
       // Mark whether this message (sent by the current user) has been read by the other user
       readByOther:
@@ -100,6 +101,7 @@ export const sendMessage = mutation({
   args: {
     conversationId: v.id('conversations'),
     body: v.string(),
+    images: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
@@ -125,6 +127,7 @@ export const sendMessage = mutation({
       conversationId: args.conversationId,
       senderEmail: identity.email,
       body: args.body,
+      images: args.images ?? undefined,
       createdAt: Date.now(),
     })
 

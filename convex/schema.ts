@@ -48,6 +48,7 @@ export default defineSchema({
     conversationId: v.id("conversations"),
     senderEmail: v.string(),
     body: v.string(),
+    images: v.optional(v.array(v.string())),
     createdAt: v.optional(v.number()),
     author: v.optional(v.string()),
     read: v.optional(v.boolean()),

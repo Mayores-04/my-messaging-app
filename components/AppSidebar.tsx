@@ -45,7 +45,7 @@ export function AppSidebar({ isOpen, toggleSidebar }: AppSidebarProps) {
     >
       <div className="flex flex-col h-full">
         {/* Toggle Button */}
-        <div className="p-4 flex items-center justify-between border-b border-[#53473c]">
+        <div className="px-5 py-4 flex items-center justify-between border-b border-[#53473c]">
           {isOpen && (
             <h2 className="text-white font-semibold text-lg">ConnectApp</h2>
           )}

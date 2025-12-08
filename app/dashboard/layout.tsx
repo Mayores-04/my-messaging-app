@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { useUserPresence } from "@/hooks/useUserPresence";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // Track user presence and handle offline status
   useUserPresence();
