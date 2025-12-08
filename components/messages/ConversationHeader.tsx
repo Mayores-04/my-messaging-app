@@ -3,6 +3,8 @@ import { ArrowLeft, MenuIcon, PhoneCall, VideoIcon, Check, Trash2 } from "lucide
 import { Button } from "../ui/button";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useState } from "react";
+import UserProfileModal from "./UserProfileModal";
 
 interface ConversationHeaderProps {
   conversation: any;
@@ -19,12 +21,17 @@ export default function ConversationHeader({
   onBack,
   onVideoCall,
 }: ConversationHeaderProps) {
+  const [showProfile, setShowProfile] = useState(false);
   const acceptConversation = useMutation(api.messages.acceptConversation);
   const deleteConversation = useMutation(api.messages.deleteConversation);
 
   const myEmail = conversation.user1Email === conversation.otherUserEmail ? conversation.user2Email : conversation.user1Email;
   const isAccepted = conversation.acceptedBy?.includes(myEmail) || false;
   const isRestricted = !isAccepted;
+  
+  // Calls are only allowed if BOTH users have accepted (meaning they are friends or request accepted)
+  // If acceptedBy is undefined (legacy), we assume allowed. If defined, must have >= 2 entries.
+  const canCall = !conversation.acceptedBy || conversation.acceptedBy.length >= 2;
 
   const handleAccept = async () => {
     await acceptConversation({ conversationId: conversation._id });
@@ -38,68 +45,92 @@ export default function ConversationHeader({
   };
 
   return (
-    <div className="flex items-center gap-3 p-4 border-b border-[#53473c] bg-[#181411]">
-      <div className="flex flex-row w-full gap-3 items-center">
-        <Button
-          onClick={onBack}
-          className="md:hidden text-white hover:text-[#e67919]"
-        >
-          <ArrowLeft className="w-6 h-6" />
-        </Button>
-        <div className="w-10 h-10 rounded-full overflow-hidden bg-[#181411] flex items-center justify-center text-white font-semibold">
-          {conversation.otherUserAvatar ? (
-            <Image
-              src={conversation.otherUserAvatar}
-              alt={conversation.otherUserName}
-              width={40}
-              height={40}
-            />
+    <>
+      <div className="flex items-center gap-3 p-4 border-b border-[#53473c] bg-[#181411]">
+        <div className="flex flex-row w-full gap-3 items-center">
+          <Button
+            onClick={onBack}
+            className="md:hidden text-white hover:text-[#e67919]"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </Button>
+          <div 
+            className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => setShowProfile(true)}
+          >
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-[#181411] flex items-center justify-center text-white font-semibold">
+              {conversation.otherUserAvatar ? (
+                <Image
+                  src={conversation.otherUserAvatar}
+                  alt={conversation.otherUserName}
+                  width={40}
+                  height={40}
+                />
+              ) : (
+                <span className="text-sm">{conversation.otherUserName[0]}</span>
+              )}
+            </div>
+            <div>
+              <h2 className="text-white font-semibold">
+                {conversation.otherUserName}
+              </h2>
+              <p className="text-[#b8aa9d] text-xs">
+                {isTyping
+                  ? "typing..."
+                  : userStatus?.isOnline
+                    ? "Active now"
+                    : "Offline"}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-row items-center gap-4">
+          {isRestricted ? (
+            <>
+              <button
+                onClick={handleDelete}
+                className="text-red-500 hover:text-red-400 flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-500/10 hover:bg-red-500/20 transition-colors text-sm font-medium"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+              <button
+                onClick={handleAccept}
+                className="text-[#e67919] hover:text-[#cf6213] flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#e67919]/10 hover:bg-[#e67919]/20 transition-colors text-sm font-medium"
+              >
+                <Check className="w-4 h-4" />
+                Accept
+              </button>
+            </>
           ) : (
-            <span className="text-sm">{conversation.otherUserName[0]}</span>
+            <>
+              {canCall && (
+                <>
+                  <PhoneCall className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer" />
+                  <VideoIcon
+                    onClick={onVideoCall}
+                    className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer"
+                  />
+                </>
+              )}
+              <MenuIcon 
+                onClick={() => setShowProfile(true)}
+                className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer" 
+              />
+            </>
           )}
         </div>
-        <div>
-          <h2 className="text-white font-semibold">
-            {conversation.otherUserName}
-          </h2>
-          <p className="text-[#b8aa9d] text-xs">
-            {isTyping
-              ? "typing..."
-              : userStatus?.isOnline
-                ? "Active now"
-                : "Offline"}
-          </p>
-        </div>
       </div>
-      <div className="flex flex-row items-center gap-4">
-        {isRestricted ? (
-          <>
-            <button
-              onClick={handleDelete}
-              className="text-red-500 hover:text-red-400 flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-500/10 hover:bg-red-500/20 transition-colors text-sm font-medium"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
-            <button
-              onClick={handleAccept}
-              className="text-[#e67919] hover:text-[#cf6213] flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#e67919]/10 hover:bg-[#e67919]/20 transition-colors text-sm font-medium"
-            >
-              <Check className="w-4 h-4" />
-              Accept
-            </button>
-          </>
-        ) : (
-          <>
-            <PhoneCall className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer" />
-            <VideoIcon
-              onClick={onVideoCall}
-              className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer"
-            />
-            <MenuIcon className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer" />
-          </>
-        )}
-      </div>
-    </div>
+
+      <UserProfileModal 
+        isOpen={showProfile}
+        onClose={() => setShowProfile(false)}
+        user={{
+          name: conversation.otherUserName,
+          email: conversation.otherUserEmail,
+          avatar: conversation.otherUserAvatar
+        }}
+      />
+    </>
   );
 }
