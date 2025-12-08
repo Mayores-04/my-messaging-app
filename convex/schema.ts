@@ -43,6 +43,7 @@ export default defineSchema({
     user2LastReadAt: v.optional(v.number()),
     user1UnreadCount: v.optional(v.number()), // Cache unread count for user1
     user2UnreadCount: v.optional(v.number()), // Cache unread count for user2
+    acceptedBy: v.optional(v.array(v.string())), // List of user emails who have accepted the conversation
   })
     .index("by_user1", ["user1Email"])
     .index("by_user2", ["user2Email"])

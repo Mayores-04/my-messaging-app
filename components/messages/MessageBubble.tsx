@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { useState, memo, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, Edit2, Trash2, Reply, MoreVertical, Smile, Pin, Flag, Forward } from "lucide-react";
-import { useMutation } from "convex/react";
+import { X, ChevronLeft, ChevronRight, Edit2, Trash2, Reply, MoreVertical, Smile, Pin, Flag, Forward, Eye, EyeOff } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import ForwardMessageModal from "./ForwardMessageModal";
 
@@ -39,6 +39,29 @@ function MessageBubble({
   const toggleReaction = useMutation(api.messages.toggleReaction);
   const togglePin = useMutation(api.messages.togglePin);
   const reportMessage = useMutation(api.messages.reportMessage);
+  const acceptConversation = useMutation(api.messages.acceptConversation);
+  const currentUser = useQuery(api.users.getAllUsers)?.find((u: any) => u.email === message.senderEmail); // This is inefficient, but we need current user email. Better to pass it down or use useUserIdentity in parent.
+  // Actually, we can check if isOwn is false. If isOwn is false, we need to check if WE have accepted.
+  // But we don't have our own email here easily without a query.
+  // Let's assume conversation object has the acceptedBy array.
+  
+  // We need the current user's email to check against acceptedBy.
+  // Since we don't have it directly, let's use a trick:
+  // If isOwn is true, we are the sender, so we don't need to accept.
+  // If isOwn is false, we are the recipient.
+  // We need to know if WE are in acceptedBy.
+  // But we don't know OUR email.
+  // However, conversation.user1Email and conversation.user2Email are known.
+  // If isOwn is false, then senderEmail is message.senderEmail.
+  // So we are the OTHER email in the conversation.
+  
+  const myEmail = isOwn ? message.senderEmail : (conversation.user1Email === message.senderEmail ? conversation.user2Email : conversation.user1Email);
+  const isAccepted = conversation.acceptedBy?.includes(myEmail) || false;
+  const showImageContent = isOwn || isAccepted;
+
+  const handleAcceptImages = async () => {
+    await acceptConversation({ conversationId: conversation._id });
+  };
 
   const handlePin = async () => {
     await togglePin({ messageId: message._id });
@@ -303,83 +326,99 @@ function MessageBubble({
 
           {message.images && message.images.length > 0 ? (
             <div className="mb-2">
-              {message.images.length === 1 ? (
-                <img
-                  src={message.images[0]}
-                  alt="attachment"
-                  className="w-full rounded object-cover max-h-96 cursor-pointer hover:opacity-90 transition-opacity"
-                  onClick={() => openLightbox(0)}
-                />
-              ) : message.images.length === 2 ? (
-                <div className="grid grid-cols-2 gap-1">
-                  {message.images.map((img: string, index: number) => (
-                    <img
-                      key={index}
-                      src={img}
-                      alt={`attachment ${index + 1}`}
-                      className="w-full rounded object-cover h-48 cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => openLightbox(index)}
-                    />
-                  ))}
-                </div>
-              ) : message.images.length === 3 ? (
-                <div className="grid grid-cols-2 gap-1">
-                  <img
-                    src={message.images[0]}
-                    alt="attachment 1"
-                    className="col-span-2 w-full rounded object-cover h-48 cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => openLightbox(0)}
-                  />
-                  <img
-                    src={message.images[1]}
-                    alt="attachment 2"
-                    className="w-full rounded object-cover h-32 cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => openLightbox(1)}
-                  />
-                  <img
-                    src={message.images[2]}
-                    alt="attachment 3"
-                    className="w-full rounded object-cover h-32 cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => openLightbox(2)}
-                  />
-                </div>
-              ) : message.images.length === 4 ? (
-                <div className="grid grid-cols-2 gap-1">
-                  {message.images.map((img: string, index: number) => (
-                    <img
-                      key={index}
-                      src={img}
-                      alt={`attachment ${index + 1}`}
-                      className="w-full rounded object-cover h-40 cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => openLightbox(index)}
-                    />
-                  ))}
+              {!showImageContent ? (
+                <div className="bg-[#26211c] border border-[#53473c] rounded p-4 flex flex-col items-center justify-center gap-3 min-w-[200px]">
+                  <EyeOff className="w-8 h-8 text-[#b8aa9d]" />
+                  <p className="text-[#b8aa9d] text-sm text-center">Images hidden from non-friend</p>
+                  <button
+                    onClick={handleAcceptImages}
+                    className="bg-[#e67919] hover:bg-[#cf6213] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
+                  >
+                    <Eye className="w-3 h-3" />
+                    View Images
+                  </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-1">
-                  {message.images
-                    .slice(0, 4)
-                    .map((img: string, index: number) => (
-                      <div
-                        key={index}
-                        className="relative cursor-pointer"
-                        onClick={() => openLightbox(index)}
-                      >
+                <>
+                  {message.images.length === 1 ? (
+                    <img
+                      src={message.images[0]}
+                      alt="attachment"
+                      className="w-full rounded object-cover max-h-96 cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => openLightbox(0)}
+                    />
+                  ) : message.images.length === 2 ? (
+                    <div className="grid grid-cols-2 gap-1">
+                      {message.images.map((img: string, index: number) => (
                         <img
+                          key={index}
                           src={img}
                           alt={`attachment ${index + 1}`}
-                          className="w-full rounded object-cover h-40 hover:opacity-90 transition-opacity"
+                          className="w-full rounded object-cover h-48 cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => openLightbox(index)}
                         />
-                        {index === 3 && message.images.length > 4 && (
-                          <div className="absolute inset-0 bg-black/70 bg-opacity-60 rounded flex items-center justify-center">
-                            <span className="text-white text-2xl font-bold">
-                              +{message.images.length - 4}
-                            </span>
+                      ))}
+                    </div>
+                  ) : message.images.length === 3 ? (
+                    <div className="grid grid-cols-2 gap-1">
+                      <img
+                        src={message.images[0]}
+                        alt="attachment 1"
+                        className="col-span-2 w-full rounded object-cover h-48 cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => openLightbox(0)}
+                      />
+                      <img
+                        src={message.images[1]}
+                        alt="attachment 2"
+                        className="w-full rounded object-cover h-32 cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => openLightbox(1)}
+                      />
+                      <img
+                        src={message.images[2]}
+                        alt="attachment 3"
+                        className="w-full rounded object-cover h-32 cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => openLightbox(2)}
+                      />
+                    </div>
+                  ) : message.images.length === 4 ? (
+                    <div className="grid grid-cols-2 gap-1">
+                      {message.images.map((img: string, index: number) => (
+                        <img
+                          key={index}
+                          src={img}
+                          alt={`attachment ${index + 1}`}
+                          className="w-full rounded object-cover h-40 cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => openLightbox(index)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-1">
+                      {message.images
+                        .slice(0, 4)
+                        .map((img: string, index: number) => (
+                          <div
+                            key={index}
+                            className="relative cursor-pointer"
+                            onClick={() => openLightbox(index)}
+                          >
+                            <img
+                              src={img}
+                              alt={`attachment ${index + 1}`}
+                              className="w-full rounded object-cover h-40 hover:opacity-90 transition-opacity"
+                            />
+                            {index === 3 && message.images.length > 4 && (
+                              <div className="absolute inset-0 bg-black/70 bg-opacity-60 rounded flex items-center justify-center">
+                                <span className="text-white text-2xl font-bold">
+                                  +{message.images.length - 4}
+                                </span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ) : null}

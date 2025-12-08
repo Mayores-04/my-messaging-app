@@ -33,12 +33,29 @@ export const getOrCreateConversation = mutation({
       return existing._id
     }
 
+    // Check if they are friends
+    const friendship = await ctx.db
+      .query('friendships')
+      .filter((q) =>
+        q.and(
+          q.eq(q.field('status'), 'accepted'),
+          q.or(
+            q.and(q.eq(q.field('user1Email'), identity.email), q.eq(q.field('user2Email'), args.otherUserEmail)),
+            q.and(q.eq(q.field('user1Email'), args.otherUserEmail), q.eq(q.field('user2Email'), identity.email))
+          )
+        )
+      )
+      .first();
+
+    const acceptedBy = friendship ? [identity.email, args.otherUserEmail] : [identity.email];
+
     // Create new conversation
     const conversationId = await ctx.db.insert('conversations', {
       user1Email: identity.email,
       user2Email: args.otherUserEmail,
       createdAt: Date.now(),
       lastMessageAt: Date.now(),
+      acceptedBy,
     })
 
     return conversationId
@@ -567,6 +584,37 @@ export const togglePin = mutation({
     }
 
     await ctx.db.patch(args.messageId, { isPinned: !message.isPinned })
+  },
+})
+
+export const acceptConversation = mutation({
+  args: {
+    conversationId: v.id('conversations'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null || !identity.email) {
+      throw new Error('Not authenticated')
+    }
+
+    const conversation = await ctx.db.get(args.conversationId)
+    if (!conversation) {
+      throw new Error('Conversation not found')
+    }
+
+    if (
+      conversation.user1Email !== identity.email &&
+      conversation.user2Email !== identity.email
+    ) {
+      throw new Error('Unauthorized')
+    }
+
+    const acceptedBy = conversation.acceptedBy || [];
+    if (!acceptedBy.includes(identity.email)) {
+      await ctx.db.patch(args.conversationId, {
+        acceptedBy: [...acceptedBy, identity.email],
+      })
+    }
   },
 })
 
