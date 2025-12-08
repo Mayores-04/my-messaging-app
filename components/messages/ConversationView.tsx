@@ -237,7 +237,12 @@ export default function ConversationView({ conversation, onBack }: any) {
             </div>
         )}
         {status === "LoadingFirstPage" ? (
-          <div className="text-[#b8aa9d] text-center mt-10">Loading messages...</div>
+          <div className="text-[#b8aa9d] text-center mt-10">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-6 h-6 border-2 border-[#e67919] border-t-transparent rounded-full animate-spin"></div>
+              <span>Loading messages...</span>
+            </div>
+          </div>
         ) : messages.length === 0 ? (
           <div className="text-[#b8aa9d] text-center">
             No messages yet. Send the first message!

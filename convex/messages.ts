@@ -49,11 +49,7 @@ export const getOrCreateConversation = mutation({
 export const getMessagesForConversation = query({
   args: {
     conversationId: v.id('conversations'),
-    paginationOpts: v.object({
-      numItems: v.number(),
-      cursor: v.union(v.string(), v.null()),
-      id: v.optional(v.number()),
-    }),
+    paginationOpts: v.any(),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
