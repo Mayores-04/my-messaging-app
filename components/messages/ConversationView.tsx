@@ -214,6 +214,18 @@ export default function ConversationView({ conversation, onBack }: any) {
     setMessageText((prev) => prev + emojiData.emoji);
   };
 
+  const handleReplyClick = (messageId: string) => {
+    const element = document.getElementById(`message-${messageId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Highlight effect
+      element.classList.add("bg-white/10");
+      setTimeout(() => element.classList.remove("bg-white/10"), 1000);
+    } else {
+      console.log("Message not loaded in view");
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen w-full">
       {/* Header */}
@@ -258,6 +270,7 @@ export default function ConversationView({ conversation, onBack }: any) {
                 conversation={conversation}
                 isLastRead={message._id === lastReadMessageId}
                 onReply={setReplyTo}
+                onReplyClick={handleReplyClick}
               />
             );
           })

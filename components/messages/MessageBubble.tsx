@@ -10,6 +10,7 @@ interface MessageBubbleProps {
   conversation: any;
   isLastRead: boolean;
   onReply?: (message: any) => void;
+  onReplyClick?: (messageId: string) => void;
 }
 
 function MessageBubble({
@@ -18,6 +19,7 @@ function MessageBubble({
   conversation,
   isLastRead,
   onReply,
+  onReplyClick,
 }: MessageBubbleProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -100,7 +102,8 @@ function MessageBubble({
     <>
       {/* Full-width hover container */}
       <div
-        className={`group w-full flex ${isOwn ? "justify-end" : "justify-start"}`}
+        id={`message-${message._id}`}
+        className={`group w-full flex ${isOwn ? "justify-end" : "justify-start"} transition-colors duration-500`}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -127,7 +130,10 @@ function MessageBubble({
             >
             {/* Replied Message Preview */}
             {message.replyTo && (
-              <div className="mb-2 p-2 bg-black/20 rounded border-l-2 border-white/50">
+              <div 
+                className="mb-2 p-2 bg-black/20 rounded border-l-2 border-white/50 cursor-pointer hover:bg-black/30 transition-colors"
+                onClick={() => onReplyClick?.(message.replyTo._id)}
+              >
                 <p className="text-xs opacity-75 mb-1">
                   {message.replyTo.senderEmail === message.senderEmail ? "You" : conversation.otherUserName} replied:
                 </p>
