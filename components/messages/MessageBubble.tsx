@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { useState, memo, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, Edit2, Trash2, Reply, MoreVertical, Smile, Pin, Flag, Forward, Eye, EyeOff } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Edit2, Trash2, Reply, MoreVertical, Smile, Pin, Flag, Forward, Eye, EyeOff, Check } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import ForwardMessageModal from "./ForwardMessageModal";
@@ -33,34 +33,37 @@ function MessageBubble({
   const [showReportConfirm, setShowReportConfirm] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [viewLevel, setViewLevel] = useState<0 | 1 | 2>(0); // 0: Hidden, 1: Blurred, 2: Visible
   
   const editMessage = useMutation(api.messages.editMessage);
   const unsendMessage = useMutation(api.messages.unsendMessage);
+  const deleteMessage = useMutation(api.messages.deleteMessage);
   const toggleReaction = useMutation(api.messages.toggleReaction);
   const togglePin = useMutation(api.messages.togglePin);
   const reportMessage = useMutation(api.messages.reportMessage);
   const acceptConversation = useMutation(api.messages.acceptConversation);
-  const currentUser = useQuery(api.users.getAllUsers)?.find((u: any) => u.email === message.senderEmail); // This is inefficient, but we need current user email. Better to pass it down or use useUserIdentity in parent.
-  // Actually, we can check if isOwn is false. If isOwn is false, we need to check if WE have accepted.
-  // But we don't have our own email here easily without a query.
-  // Let's assume conversation object has the acceptedBy array.
-  
-  // We need the current user's email to check against acceptedBy.
-  // Since we don't have it directly, let's use a trick:
-  // If isOwn is true, we are the sender, so we don't need to accept.
-  // If isOwn is false, we are the recipient.
-  // We need to know if WE are in acceptedBy.
-  // But we don't know OUR email.
-  // However, conversation.user1Email and conversation.user2Email are known.
-  // If isOwn is false, then senderEmail is message.senderEmail.
-  // So we are the OTHER email in the conversation.
   
   const myEmail = isOwn ? message.senderEmail : (conversation.user1Email === message.senderEmail ? conversation.user2Email : conversation.user1Email);
   const isAccepted = conversation.acceptedBy?.includes(myEmail) || false;
-  const showImageContent = isOwn || isAccepted;
+  const isRestricted = !isOwn && !isAccepted;
+  
+  // Determine visibility based on restriction and local view level
+  const isContentVisible = !isRestricted || viewLevel === 2;
+  const isContentBlurred = isRestricted && viewLevel === 1;
+  const isContentHidden = isRestricted && viewLevel === 0;
 
-  const handleAcceptImages = async () => {
+  const handleAccept = async () => {
     await acceptConversation({ conversationId: conversation._id });
+  };
+
+  const handleDelete = async () => {
+    if (confirm("Are you sure you want to delete this message?")) {
+      await deleteMessage({ messageId: message._id });
+    }
+  };
+
+  const handleDecline = () => {
+    setViewLevel(0);
   };
 
   const handlePin = async () => {
@@ -326,26 +329,53 @@ function MessageBubble({
 
           {message.images && message.images.length > 0 ? (
             <div className="mb-2">
-              {!showImageContent ? (
+              {isContentHidden ? (
                 <div className="bg-[#26211c] border border-[#53473c] rounded p-4 flex flex-col items-center justify-center gap-3 min-w-[200px]">
                   <EyeOff className="w-8 h-8 text-[#b8aa9d]" />
-                  <p className="text-[#b8aa9d] text-sm text-center">Images hidden from non-friend</p>
-                  <button
-                    onClick={handleAcceptImages}
-                    className="bg-[#e67919] hover:bg-[#cf6213] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
-                  >
-                    <Eye className="w-3 h-3" />
-                    View Images
-                  </button>
+                  <p className="text-[#b8aa9d] text-sm text-center">Message Request</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setViewLevel(1)}
+                      className="bg-[#53473c] hover:bg-[#3a332c] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
+                    >
+                      <Eye className="w-3 h-3" />
+                      Peek
+                    </button>
+                    <button
+                      onClick={handleAccept}
+                      className="bg-[#e67919] hover:bg-[#cf6213] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
+                    >
+                      <Check className="w-3 h-3" />
+                      Accept
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      className="bg-red-500/20 hover:bg-red-500/30 text-red-500 border border-red-500/50 text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <>
+                <div className={`relative ${isContentBlurred ? "filter blur-md select-none" : ""}`}>
+                  {isContentBlurred && (
+                    <div className="absolute inset-0 z-20 flex items-center justify-center">
+                      <button
+                        onClick={() => setViewLevel(2)}
+                        className="bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-sm transition-all flex items-center gap-2"
+                      >
+                        <Eye className="w-4 h-4" />
+                        Tap to View
+                      </button>
+                    </div>
+                  )}
                   {message.images.length === 1 ? (
                     <img
                       src={message.images[0]}
                       alt="attachment"
                       className="w-full rounded object-cover max-h-96 cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => openLightbox(0)}
+                      onClick={() => !isContentBlurred && openLightbox(0)}
                     />
                   ) : message.images.length === 2 ? (
                     <div className="grid grid-cols-2 gap-1">
@@ -355,7 +385,7 @@ function MessageBubble({
                           src={img}
                           alt={`attachment ${index + 1}`}
                           className="w-full rounded object-cover h-48 cursor-pointer hover:opacity-90 transition-opacity"
-                          onClick={() => openLightbox(index)}
+                          onClick={() => !isContentBlurred && openLightbox(index)}
                         />
                       ))}
                     </div>
@@ -365,19 +395,19 @@ function MessageBubble({
                         src={message.images[0]}
                         alt="attachment 1"
                         className="col-span-2 w-full rounded object-cover h-48 cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => openLightbox(0)}
+                        onClick={() => !isContentBlurred && openLightbox(0)}
                       />
                       <img
                         src={message.images[1]}
                         alt="attachment 2"
                         className="w-full rounded object-cover h-32 cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => openLightbox(1)}
+                        onClick={() => !isContentBlurred && openLightbox(1)}
                       />
                       <img
                         src={message.images[2]}
                         alt="attachment 3"
                         className="w-full rounded object-cover h-32 cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => openLightbox(2)}
+                        onClick={() => !isContentBlurred && openLightbox(2)}
                       />
                     </div>
                   ) : message.images.length === 4 ? (
@@ -388,7 +418,7 @@ function MessageBubble({
                           src={img}
                           alt={`attachment ${index + 1}`}
                           className="w-full rounded object-cover h-40 cursor-pointer hover:opacity-90 transition-opacity"
-                          onClick={() => openLightbox(index)}
+                          onClick={() => !isContentBlurred && openLightbox(index)}
                         />
                       ))}
                     </div>
@@ -400,7 +430,7 @@ function MessageBubble({
                           <div
                             key={index}
                             className="relative cursor-pointer"
-                            onClick={() => openLightbox(index)}
+                            onClick={() => !isContentBlurred && openLightbox(index)}
                           >
                             <img
                               src={img}
@@ -418,50 +448,119 @@ function MessageBubble({
                         ))}
                     </div>
                   )}
-                </>
+                </div>
               )}
             </div>
           ) : null}
           {message.body && (
-            isEditing ? (
-              <div className="flex flex-col gap-2">
-                <input
-                  type="text"
-                  value={editedText}
-                  onChange={(e) => setEditedText(e.target.value)}
-                  onKeyDown={handleEditKeyDown}
-                  className="bg-[#26211c] text-white border border-[#53473c] rounded px-2 py-1 focus:outline-none focus:border-[#e67919]"
-                  placeholder="Edit message..."
-                  aria-label="Edit message text"
-                  autoFocus
-                />
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={handleCancelEdit}
-                    className="text-xs px-2 py-1 rounded hover:bg-[#53473c] transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveEdit}
-                    className="text-xs px-2 py-1 rounded bg-[#e67919] hover:bg-[#d56f15] transition-colors"
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
+            isContentHidden ? (
+               <div className="bg-[#26211c] border border-[#53473c] rounded p-4 flex flex-col items-center justify-center gap-3 min-w-[200px]">
+                  <p className="text-[#b8aa9d] text-sm text-center">Message Request</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setViewLevel(1)}
+                      className="bg-[#53473c] hover:bg-[#3a332c] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
+                    >
+                      <Eye className="w-3 h-3" />
+                      Peek
+                    </button>
+                    <button
+                      onClick={handleAccept}
+                      className="bg-[#e67919] hover:bg-[#cf6213] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
+                    >
+                      <Check className="w-3 h-3" />
+                      Accept
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      className="bg-red-500/20 hover:bg-red-500/30 text-red-500 border border-red-500/50 text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Delete
+                    </button>
+                  </div>
+               </div>
             ) : (
-              <>
-                <p className="wrap-break-word">{message.body}</p>
-                {message.isEdited && (
-                  <span className={`text-xs italic ${
-                    isOwn ? "text-[#211811]" : "text-[#b8aa9d]"
-                  }`}>
-                    (edited)
-                  </span>
+              <div className={`relative ${isContentBlurred ? "filter blur-md select-none" : ""}`}>
+                {isContentBlurred && (
+                    <div className="absolute inset-0 z-20 flex items-center justify-center">
+                      <button
+                        onClick={() => setViewLevel(2)}
+                        className="bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-sm transition-all flex items-center gap-2"
+                      >
+                        <Eye className="w-4 h-4" />
+                        Tap to View
+                      </button>
+                    </div>
                 )}
-              </>
+                {isEditing ? (
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="text"
+                      value={editedText}
+                      onChange={(e) => setEditedText(e.target.value)}
+                      onKeyDown={handleEditKeyDown}
+                      className="bg-[#26211c] text-white border border-[#53473c] rounded px-2 py-1 focus:outline-none focus:border-[#e67919]"
+                      placeholder="Edit message..."
+                      aria-label="Edit message text"
+                      autoFocus
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={handleCancelEdit}
+                        className="text-xs px-2 py-1 rounded hover:bg-[#53473c] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveEdit}
+                        className="text-xs px-2 py-1 rounded bg-[#e67919] hover:bg-[#d56f15] transition-colors"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="wrap-break-word">{message.body}</p>
+                    {message.isEdited && (
+                      <span className={`text-xs italic ${
+                        isOwn ? "text-[#211811]" : "text-[#b8aa9d]"
+                      }`}>
+                        (edited)
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
             )
+          )}
+          
+          {/* Action Toolbar for Visible/Blurred Restricted Messages */}
+          {isRestricted && viewLevel > 0 && (
+             <div className="mt-2 pt-2 border-t border-[#53473c]/50 flex justify-end gap-2">
+                <button
+                  onClick={handleDecline}
+                  className="text-[#b8aa9d] hover:text-white text-xs flex items-center gap-1 px-2 py-1 rounded hover:bg-[#53473c] transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                  Decline
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="text-red-500 hover:text-red-400 text-xs flex items-center gap-1 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Delete
+                </button>
+                <button
+                  onClick={handleAccept}
+                  className="text-[#e67919] hover:text-[#cf6213] text-xs flex items-center gap-1 px-2 py-1 rounded hover:bg-[#e67919]/10 transition-colors font-medium"
+                >
+                  <Check className="w-3 h-3" />
+                  Accept
+                </button>
+             </div>
           )}
             </div>
 

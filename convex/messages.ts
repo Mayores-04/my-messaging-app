@@ -680,3 +680,35 @@ export const reportMessage = mutation({
     })
   },
 })
+
+export const deleteMessage = mutation({
+  args: {
+    messageId: v.id('messages'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const message = await ctx.db.get(args.messageId)
+    if (!message) {
+      throw new Error('Message not found')
+    }
+
+    const conversation = await ctx.db.get(message.conversationId)
+    if (!conversation) {
+      throw new Error('Conversation not found')
+    }
+
+    if (
+      conversation.user1Email !== identity.email &&
+      conversation.user2Email !== identity.email
+    ) {
+      throw new Error('Unauthorized')
+    }
+
+    // Mark as deleted instead of removing to preserve history/sync
+    await ctx.db.patch(args.messageId, { isDeleted: true })
+  },
+})
