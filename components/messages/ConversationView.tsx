@@ -14,6 +14,9 @@ const VideoCallModal = lazy(() => import("./VideoCallModal"));
 const IncomingCallNotification = lazy(() => import("./IncomingCallNotification"));
 
 export default function ConversationView({ conversation, onBack }: any) {
+  const liveConversation = useQuery(api.messages.getConversation, { conversationId: conversation._id });
+  const activeConversation = liveConversation || conversation;
+
   const { results, status, loadMore } = usePaginatedQuery(
     api.messages.getMessagesForConversation,
     { conversationId: conversation._id },
@@ -32,16 +35,16 @@ export default function ConversationView({ conversation, onBack }: any) {
   })();
 
   const isTyping = useQuery(api.messages.isOtherUserTyping, {
-    conversationId: conversation._id,
-    otherUserEmail: conversation.otherUserEmail,
+    conversationId: activeConversation._id,
+    otherUserEmail: activeConversation.otherUserEmail,
   });
 
   const userStatus = useQuery(api.users.getUserOnlineStatus, {
-    userEmail: conversation.otherUserEmail,
+    userEmail: activeConversation.otherUserEmail,
   });
 
   const pinnedMessages = useQuery(api.messages.getPinnedMessages, {
-    conversationId: conversation._id,
+    conversationId: activeConversation._id,
   });
 
   const sendMessage = useMutation(api.messages.sendMessage);
@@ -67,7 +70,7 @@ export default function ConversationView({ conversation, onBack }: any) {
     handleAcceptCall,
     handleRejectCall,
     handleCloseVideoCall,
-  } = useVideoCall(conversation);
+  } = useVideoCall(activeConversation);
 
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [targetMessageId, setTargetMessageId] = useState<string | null>(null);
@@ -124,21 +127,21 @@ export default function ConversationView({ conversation, onBack }: any) {
     isInitialLoadRef.current = true;
     lastMessageIdRef.current = null;
     setIsLoadingMore(false);
-  }, [conversation._id]);
+  }, [activeConversation._id]);
 
   // Mark messages as read when conversation opens or new messages arrive
   useEffect(() => {
     if (messages && messages.length > 0) {
-      markAsRead({ conversationId: conversation._id });
+      markAsRead({ conversationId: activeConversation._id });
     }
-  }, [messages, conversation._id, markAsRead]);
+  }, [messages, activeConversation._id, markAsRead]);
 
   const handleTyping = (text: string) => {
     setMessageText(text);
 
     // Set typing to true
     setTypingStatus({
-      conversationId: conversation._id,
+      conversationId: activeConversation._id,
       isTyping: true,
     });
 
@@ -282,7 +285,7 @@ export default function ConversationView({ conversation, onBack }: any) {
       )}
       {/* Header */}
       <ConversationHeader
-        conversation={conversation}
+        conversation={activeConversation}
         isTyping={isTyping}
         userStatus={userStatus}
         onBack={onBack}
@@ -380,13 +383,13 @@ export default function ConversationView({ conversation, onBack }: any) {
           </div>
         ) : (
           messages.map((message: any) => {
-            const isOwn = message.senderEmail !== conversation.otherUserEmail;
+            const isOwn = message.senderEmail !== activeConversation.otherUserEmail;
             return (
               <MessageBubble
                 key={message._id}
                 message={message}
                 isOwn={isOwn}
-                conversation={conversation}
+                conversation={activeConversation}
                 isLastRead={message._id === lastReadMessageId}
                 onReply={setReplyTo}
                 onReplyClick={handleReplyClick}
@@ -419,7 +422,7 @@ export default function ConversationView({ conversation, onBack }: any) {
       {showIncomingCall && (
         <Suspense fallback={<div>Loading call...</div>}>
           <IncomingCallNotification
-            conversation={conversation}
+            conversation={activeConversation}
             onAccept={handleAcceptCall}
             onReject={handleRejectCall}
           />
@@ -430,7 +433,7 @@ export default function ConversationView({ conversation, onBack }: any) {
       {isVideoCallActive && (
         <Suspense fallback={<div>Starting call...</div>}>
           <VideoCallModal
-            conversation={conversation}
+            conversation={activeConversation}
             onClose={handleCloseVideoCall}
             initiator={isCallInitiator}
           />

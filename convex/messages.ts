@@ -618,6 +618,49 @@ export const acceptConversation = mutation({
   },
 })
 
+export const getConversation = query({
+  args: {
+    conversationId: v.id('conversations'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) {
+      throw new Error('Not authenticated')
+    }
+
+    const conversation = await ctx.db.get(args.conversationId)
+    if (!conversation) {
+      return null
+    }
+
+    if (
+      conversation.user1Email !== identity.email &&
+      conversation.user2Email !== identity.email
+    ) {
+      throw new Error('Unauthorized')
+    }
+
+    // Determine other user
+    const otherUserEmail =
+      conversation.user1Email === identity.email
+        ? conversation.user2Email
+        : conversation.user1Email
+
+    const otherUser = await ctx.db
+      .query('users')
+      .withIndex('by_email', (q) => q.eq('email', otherUserEmail))
+      .first()
+
+    return {
+      ...conversation,
+      otherUserEmail,
+      otherUserName: otherUser?.fullName ?? otherUser?.firstName ?? otherUserEmail,
+      otherUserAvatar: otherUser?.avatarUrl ?? null,
+      otherUserLastActive: otherUser?.lastActive ?? null,
+    }
+  },
+})
+
 export const reportMessage = mutation({
   args: {
     messageId: v.id('messages'),
