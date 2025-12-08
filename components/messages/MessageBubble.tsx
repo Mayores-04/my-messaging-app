@@ -27,6 +27,7 @@ function MessageBubble({
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(message.body || "");
   const [showUnsendConfirm, setShowUnsendConfirm] = useState(false);
+  const [isUnsending, setIsUnsending] = useState(false);
   
   const editMessage = useMutation(api.messages.editMessage);
   const unsendMessage = useMutation(api.messages.unsendMessage);
@@ -78,10 +79,17 @@ function MessageBubble({
   };
 
   const confirmUnsend = async () => {
-    await unsendMessage({
-      messageId: message._id,
-    });
-    setShowUnsendConfirm(false);
+    setIsUnsending(true);
+    try {
+      await unsendMessage({
+        messageId: message._id,
+      });
+    } catch (error) {
+      console.error("Failed to unsend message:", error);
+      setIsUnsending(false);
+    } finally {
+      setShowUnsendConfirm(false);
+    }
   };
 
   const cancelUnsend = () => {
@@ -97,6 +105,16 @@ function MessageBubble({
       handleCancelEdit();
     }
   };
+
+  if (message.isDeleted) {
+    return (
+      <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"} mb-2`}>
+        <div className={`px-4 py-2 rounded-2xl border border-[#53473c] bg-[#26211c] text-[#b8aa9d] text-sm italic`}>
+          {isOwn ? "You" : conversation.otherUserName.split(' ')[0]} unsent a message
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -348,15 +366,24 @@ function MessageBubble({
             <div className="flex gap-3 justify-end">
               <button
                 onClick={cancelUnsend}
-                className="px-4 py-2 rounded bg-[#53473c] text-white hover:bg-[#6a5a4a] transition-colors"
+                disabled={isUnsending}
+                className="px-4 py-2 rounded bg-[#53473c] text-white hover:bg-[#6a5a4a] transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmUnsend}
-                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
+                disabled={isUnsending}
+                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
               >
-                Unsend
+                {isUnsending ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Unsending...
+                  </>
+                ) : (
+                  "Unsend"
+                )}
               </button>
             </div>
           </div>

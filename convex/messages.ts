@@ -118,7 +118,7 @@ export const getMessagesForConversation = query({
 
     return {
       ...results,
-      page: page.filter(m => !m.isDeleted)
+      page: page // Return all messages, including deleted ones
     }
   },
 })
@@ -270,18 +270,29 @@ export const getConversationsForCurrentUser = query({
       // Calculate unread count - messages sent by other user after my last read
       const lastReadAt = isUser1 ? (conv.user1LastReadAt ?? 0) : (conv.user2LastReadAt ?? 0)
       const unreadCount = convMessages.filter(
-        (m: any) => m.senderEmail === otherUserEmail && m._creationTime > lastReadAt
+        (m: any) => m.senderEmail === otherUserEmail && m._creationTime > lastReadAt && !m.isDeleted
       ).length
 
       // Check if user is online (active within last 5 minutes)
       const isOnline = otherUser?.lastActive ? (Date.now() - otherUser.lastActive) < 5 * 60 * 1000 : false
+
+      let lastMessagePreview = 'No messages yet'
+      if (lastMessage) {
+        if (lastMessage.isDeleted) {
+          lastMessagePreview = lastMessage.senderEmail === identity.email ? 'You unsent a message' : 'Message unsent'
+        } else if (lastMessage.images && lastMessage.images.length > 0) {
+          lastMessagePreview = 'Sent an image'
+        } else {
+          lastMessagePreview = lastMessage.body
+        }
+      }
 
       return {
         _id: conv._id,
         otherUserEmail,
         otherUserName: otherUser?.fullName ?? otherUser?.firstName ?? otherUserEmail,
         otherUserAvatar: otherUser?.avatarUrl ?? null,
-        lastMessage: lastMessage?.body ?? 'No messages yet',
+        lastMessage: lastMessagePreview,
         lastMessageAt: conv.lastMessageAt ?? conv.createdAt,
         unreadCount,
         isOnline,
