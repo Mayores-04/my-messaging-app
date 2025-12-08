@@ -108,10 +108,10 @@ export default function ConversationHeader({
             <>
               {canCall && (
                 <>
-                  <PhoneCall className="w-4 h-4 md:w-5 md:h-5 text-white hover:text-[#e67919] cursor-pointer" />
+                  <PhoneCall className="m-2 w-5 h-5 md:w-6 md:h-6 text-white hover:text-[#e67919] cursor-pointer" />
                   <VideoIcon
                     onClick={onVideoCall}
-                    className="w-4 h-4 md:w-5 md:h-5 text-white hover:text-[#e67919] cursor-pointer"
+                    className="m-2 w-5 h-5 md:w-6 md:h-6 text-white hover:text-[#e67919] cursor-pointer"
                   />
                 </>
               )}
