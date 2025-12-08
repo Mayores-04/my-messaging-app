@@ -618,6 +618,43 @@ export const acceptConversation = mutation({
   },
 })
 
+export const deleteConversation = mutation({
+  args: {
+    conversationId: v.id('conversations'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null || !identity.email) {
+      throw new Error('Not authenticated')
+    }
+
+    const conversation = await ctx.db.get(args.conversationId)
+    if (!conversation) {
+      throw new Error('Conversation not found')
+    }
+
+    if (
+      conversation.user1Email !== identity.email &&
+      conversation.user2Email !== identity.email
+    ) {
+      throw new Error('Unauthorized')
+    }
+
+    // Delete all messages in the conversation
+    const messages = await ctx.db
+      .query('messages')
+      .withIndex('by_conversation', (q) => q.eq('conversationId', args.conversationId))
+      .collect();
+    
+    for (const message of messages) {
+      await ctx.db.delete(message._id);
+    }
+
+    // Delete the conversation
+    await ctx.db.delete(args.conversationId);
+  },
+})
+
 export const getConversation = query({
   args: {
     conversationId: v.id('conversations'),

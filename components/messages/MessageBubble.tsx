@@ -536,32 +536,6 @@ function MessageBubble({
             )
           )}
           
-          {/* Action Toolbar for Visible/Blurred Restricted Messages */}
-          {isRestricted && viewLevel > 0 && (
-             <div className="mt-2 pt-2 border-t border-[#53473c]/50 flex justify-end gap-2">
-                <button
-                  onClick={handleDecline}
-                  className="text-[#b8aa9d] hover:text-white text-xs flex items-center gap-1 px-2 py-1 rounded hover:bg-[#53473c] transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                  Decline
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="text-red-500 hover:text-red-400 text-xs flex items-center gap-1 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Delete
-                </button>
-                <button
-                  onClick={handleAccept}
-                  className="text-[#e67919] hover:text-[#cf6213] text-xs flex items-center gap-1 px-2 py-1 rounded hover:bg-[#e67919]/10 transition-colors font-medium"
-                >
-                  <Check className="w-3 h-3" />
-                  Accept
-                </button>
-             </div>
-          )}
             </div>
 
             {/* Show other user's avatar under the latest message they have read */}
