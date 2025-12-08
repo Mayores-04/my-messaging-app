@@ -65,6 +65,7 @@ export default function ConversationView({ conversation, onBack }: any) {
   } = useVideoCall(conversation);
 
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [targetMessageId, setTargetMessageId] = useState<string | null>(null);
   const previousScrollHeightRef = useRef(0);
   const lastMessageIdRef = useRef<string | null>(null);
 
@@ -72,7 +73,7 @@ export default function ConversationView({ conversation, onBack }: any) {
     if (!messagesContainerRef.current) return;
     const { scrollTop, scrollHeight } = messagesContainerRef.current;
     
-    if (scrollTop < 100 && status === "CanLoadMore" && !isLoadingMore) {
+    if (scrollTop < 100 && status === "CanLoadMore" && !isLoadingMore && !targetMessageId) {
         setIsLoadingMore(true);
         previousScrollHeightRef.current = scrollHeight;
         loadMore(20);
@@ -101,7 +102,7 @@ export default function ConversationView({ conversation, onBack }: any) {
 
   // Smooth scroll for new messages
   useEffect(() => {
-    if (messages.length > 0 && !isInitialLoadRef.current && !isLoadingMore && messagesContainerRef.current) {
+    if (messages.length > 0 && !isInitialLoadRef.current && !isLoadingMore && !targetMessageId && messagesContainerRef.current) {
         const newestMessage = messages[messages.length - 1];
         if (newestMessage._id !== lastMessageIdRef.current) {
             messagesContainerRef.current.scrollTo({
@@ -111,7 +112,7 @@ export default function ConversationView({ conversation, onBack }: any) {
             lastMessageIdRef.current = newestMessage._id;
         }
     }
-  }, [messages, isLoadingMore]);
+  }, [messages, isLoadingMore, targetMessageId]);
 
   // Reset initial load flag when conversation changes
   useEffect(() => {
@@ -214,20 +215,59 @@ export default function ConversationView({ conversation, onBack }: any) {
     setMessageText((prev) => prev + emojiData.emoji);
   };
 
-  const handleReplyClick = (messageId: string) => {
+  const scrollToMessage = (messageId: string) => {
     const element = document.getElementById(`message-${messageId}`);
     if (element) {
       element.scrollIntoView({ behavior: "smooth", block: "center" });
-      // Highlight effect
       element.classList.add("bg-white/10");
       setTimeout(() => element.classList.remove("bg-white/10"), 1000);
-    } else {
-      console.log("Message not loaded in view");
+      return true;
+    }
+    return false;
+  };
+
+  const handleReplyClick = (messageId: string) => {
+    if (scrollToMessage(messageId)) {
+        return;
+    }
+    // Not found, start searching
+    setTargetMessageId(messageId);
+    if (status === "CanLoadMore") {
+        loadMore(20);
     }
   };
 
+  // Search for message effect
+  useEffect(() => {
+    if (targetMessageId) {
+        const found = messages.some(m => m._id === targetMessageId);
+        if (found) {
+             // Wait for render
+             setTimeout(() => {
+                 if (scrollToMessage(targetMessageId)) {
+                     setTargetMessageId(null);
+                 }
+             }, 100);
+        } else {
+            if (status === "CanLoadMore") {
+                loadMore(20);
+            } else if (status === "Exhausted") {
+                setTargetMessageId(null);
+                alert("Message not found in history");
+            }
+        }
+    }
+  }, [messages, targetMessageId, status, loadMore]);
+
   return (
-    <div className="flex flex-col h-screen w-full">
+    <div className="flex flex-col h-screen w-full relative">
+      {/* Loading overlay when searching for message */}
+      {targetMessageId && (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-[#26211c] border border-[#e67919] text-white px-4 py-2 rounded-full shadow-lg z-50 flex items-center gap-2">
+           <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+           <span className="text-sm">Locating message...</span>
+        </div>
+      )}
       {/* Header */}
       <ConversationHeader
         conversation={conversation}
