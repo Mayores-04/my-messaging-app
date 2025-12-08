@@ -1,53 +1,60 @@
 "use client";
 import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation } from "convex/react";
-import {
-  ArrowLeft,
-  ImageIcon,
-  MenuIcon,
-  PhoneCall,
-  PlusCircleIcon,
-  ScanFace,
-  Send,
-  SmileIcon,
-  ThumbsUpIcon,
-  VideoIcon,
-} from "lucide-react";
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { Button } from "../ui/button";
-import Image from "next/image";
 import VideoCallModal from "./VideoCallModal";
-import { Id } from "@/convex/_generated/dataModel";
+import ConversationHeader from "./ConversationHeader";
+import MessageBubble from "./MessageBubble";
+import TypingIndicator from "./TypingIndicator";
+import MessageInput from "./MessageInput";
+import IncomingCallNotification from "./IncomingCallNotification";
+import { useVideoCall } from "@/hooks/useVideoCall";
 
 export default function ConversationView({ conversation, onBack }: any) {
   const messages = useQuery(api.messages.getMessagesForConversation, {
     conversationId: conversation._id,
   });
+
+  // Compute the latest message id that the other user has read (for read-receipt avatar)
+  const lastReadMessageId = (() => {
+    if (!messages || messages.length === 0) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].readByOther) return messages[i]._id;
+    }
+    return null;
+  })();
+
   const isTyping = useQuery(api.messages.isOtherUserTyping, {
     conversationId: conversation._id,
     otherUserEmail: conversation.otherUserEmail,
   });
+
   const userStatus = useQuery(api.users.getUserOnlineStatus, {
     userEmail: conversation.otherUserEmail,
   });
+
   const sendMessage = useMutation(api.messages.sendMessage);
   const setTypingStatus = useMutation(api.messages.setTyping);
   const markAsRead = useMutation(api.messages.markConversationAsRead);
-  const sendSignal = useMutation(api.videoCalls.sendSignal);
-  const clearSignal = useMutation(api.videoCalls.clearSignal);
-  const pendingSignals = useQuery(api.videoCalls.getPendingSignals, {
-    conversationId: conversation._id as Id<"conversations">,
-  });
-  
+
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
-  const [isVideoCallActive, setIsVideoCallActive] = useState(false);
-  const [isCallInitiator, setIsCallInitiator] = useState(false);
-  const [showIncomingCall, setShowIncomingCall] = useState(false);
-  
+
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoadRef = useRef(true);
+
+  // Video call hook
+  const {
+    isVideoCallActive,
+    isCallInitiator,
+    showIncomingCall,
+    handleStartVideoCall,
+    handleAcceptCall,
+    handleRejectCall,
+    handleCloseVideoCall,
+  } = useVideoCall(conversation);
 
   // Scroll to bottom immediately when messages load - use useLayoutEffect to avoid flash
   useLayoutEffect(() => {
@@ -131,6 +138,19 @@ export default function ConversationView({ conversation, onBack }: any) {
         body: messageText.trim(),
       });
       setMessageText("");
+      // Keep focus on the input so the user can continue typing
+      try {
+        // small delay to ensure React has updated the value
+        requestAnimationFrame(() => {
+          if (inputRef.current) {
+            inputRef.current.focus();
+            const len = inputRef.current.value.length;
+            inputRef.current.setSelectionRange(len, len);
+          }
+        });
+      } catch (focusErr) {
+        // ignore focus errors
+      }
     } catch (error) {
       console.error("Failed to send message:", error);
       alert("Failed to send message");
@@ -152,234 +172,16 @@ export default function ConversationView({ conversation, onBack }: any) {
     };
   }, [conversation._id, setTypingStatus]);
 
-  // Check for incoming call signals
-  useEffect(() => {
-    if (pendingSignals && pendingSignals.length > 0) {
-      console.log("[ConversationView] Pending signals:", pendingSignals.map(s => s.type));
-      const callRequest = pendingSignals.find(
-        (signal) => signal.type === "call-request"
-      );
-      if (callRequest && !isVideoCallActive) {
-        console.log("[ConversationView] Showing incoming call notification");
-        setShowIncomingCall(true);
-      }
-    }
-  }, [pendingSignals, isVideoCallActive]);
-
-  const handleStartVideoCall = async () => {
-    try {
-      console.log("[ConversationView] Starting video call check...");
-      console.log("[ConversationView] Protocol:", window.location.protocol);
-      console.log("[ConversationView] Hostname:", window.location.hostname);
-      console.log("[ConversationView] Full URL:", window.location.href);
-      console.log("[ConversationView] User Agent:", navigator.userAgent);
-      console.log("[ConversationView] Navigator exists:", typeof navigator !== 'undefined');
-      console.log("[ConversationView] MediaDevices exists:", !!navigator?.mediaDevices);
-      console.log("[ConversationView] getUserMedia exists:", !!navigator?.mediaDevices?.getUserMedia);
-      
-      // Just try to get permission - let the error handling deal with unsupported browsers
-      // Pre-check permissions before starting the call
-      try {
-        // Support for legacy APIs (allow any browser implementation)
-        const getUserMedia = 
-          navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices) ||
-          (navigator as any).getUserMedia?.bind(navigator) ||
-          (navigator as any).webkitGetUserMedia?.bind(navigator) ||
-          (navigator as any).mozGetUserMedia?.bind(navigator);
-
-        if (!getUserMedia) {
-           // Don't throw, just warn and try to proceed (will likely fail later but user asked to allow all)
-           console.warn("getUserMedia not found");
-        }
-
-        let testStream: MediaStream;
-        
-        if (navigator.mediaDevices?.getUserMedia) {
-          testStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "user" },
-            audio: true
-          });
-        } else if (getUserMedia) {
-           testStream = await new Promise<MediaStream>((resolve, reject) => {
-             (getUserMedia as any)({
-                video: { facingMode: "user" },
-                audio: true
-             }, resolve, reject);
-           });
-        } else {
-           throw new Error("No media API available");
-        }
-
-        // Immediately stop the test stream
-        testStream.getTracks().forEach(track => track.stop());
-        console.log("[ConversationView] Permission test successful!");
-      } catch (permError: any) {
-        console.error("[ConversationView] Permission error:", permError);
-        let errorMsg = "Cannot start video call:\n\n";
-        if (permError.name === "NotAllowedError" || permError.name === "PermissionDeniedError") {
-          errorMsg += "❌ Camera/microphone permission denied.\n\nPlease:\n1. Tap 'Allow' when prompted\n2. Check browser settings\n3. Grant camera/mic permissions";
-        } else if (permError.name === "NotFoundError" || permError.name === "DevicesNotFoundError") {
-          errorMsg += "❌ No camera or microphone found.\n\nPlease check:\n1. Device has a camera\n2. Camera is not covered\n3. Try restarting your browser";
-        } else if (permError.name === "NotReadableError" || permError.name === "TrackStartError") {
-          errorMsg += "❌ Camera is already in use.\n\nPlease:\n1. Close other apps using camera\n2. Refresh the page\n3. Restart your browser";
-        } else if (permError.name === "NotSupportedError") {
-          errorMsg += "❌ Your browser doesn't support video calls.\n\nPlease use:\n• Chrome on Android\n• Safari on iOS\n• Make sure you're on HTTPS";
-        } else if (permError.name === "SecurityError") {
-          errorMsg += "❌ Camera access blocked.\n\nPlease:\n1. Make sure URL is HTTPS\n2. Check browser permissions\n3. Try incognito/private mode";
-        } else if (permError.name === "TypeError") {
-          // Check if we are on HTTP (insecure)
-          if (window.location.protocol === 'http:' && !window.location.hostname.includes('localhost')) {
-             errorMsg += "⚠️ Warning: You are using HTTP (insecure).\nMost browsers block camera access on HTTP.\n\nIf it fails, please switch to HTTPS or use localhost.";
-          } else {
-             errorMsg += "❌ Browser doesn't support media access.\n\nPlease:\n1. Update your browser\n2. Use Chrome/Safari\n3. Make sure you're on HTTPS";
-          }
-        } else {
-          errorMsg += "❌ " + (permError.message || "Unknown error") + "\n\nBrowser: " + (navigator.userAgent.includes("Chrome") ? "Chrome" : navigator.userAgent.includes("Safari") ? "Safari" : "Other");
-        }
-        
-        // User asked to "allow all", so we show the error but DON'T return
-        // This allows the code to proceed to sendSignal even if pre-check failed
-        alert(errorMsg + "\n\nAttempting to start call anyway...");
-        // return; // REMOVED to allow proceeding
-      }
-
-      // Permissions granted, start the call
-      await sendSignal({
-        conversationId: conversation._id,
-        toEmail: conversation.otherUserEmail,
-        type: "call-request",
-      });
-      console.log("[ConversationView] Call request sent, opening video call modal");
-      setIsCallInitiator(true);
-      setIsVideoCallActive(true);
-    } catch (error) {
-      console.error("Failed to initiate call:", error);
-      alert("Failed to start video call");
-    }
-  };
-
-  const handleAcceptCall = async () => {
-    // Pre-check permissions before accepting
-    try {
-      console.log("[ConversationView] Accepting call, checking permissions...");
-      
-      // Support for legacy APIs (allow any browser implementation)
-      const getUserMedia = 
-        (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices)) ||
-        (typeof navigator !== 'undefined' && (navigator as any).getUserMedia?.bind(navigator)) ||
-        (typeof navigator !== 'undefined' && (navigator as any).webkitGetUserMedia?.bind(navigator)) ||
-        (typeof navigator !== 'undefined' && (navigator as any).mozGetUserMedia?.bind(navigator));
-
-      if (getUserMedia) {
-        try {
-            const testStream = await new Promise<MediaStream>((resolve, reject) => {
-                const constraints = { video: { facingMode: "user" }, audio: true };
-                if (navigator.mediaDevices?.getUserMedia) {
-                    navigator.mediaDevices.getUserMedia(constraints).then(resolve).catch(reject);
-                } else {
-                    (getUserMedia as any)(constraints, resolve, reject);
-                }
-            });
-            testStream.getTracks().forEach(track => track.stop());
-            console.log("[ConversationView] Permission granted, accepting call");
-        } catch (e) {
-            console.warn("Permission check failed, but proceeding as requested:", e);
-        }
-      } else {
-         console.warn("No getUserMedia found, proceeding as requested");
-      }
-      
-      // Clear call-request signals before accepting
-      if (pendingSignals) {
-        const callRequestSignals = pendingSignals.filter(s => s.type === "call-request");
-        console.log("[ConversationView] Clearing call-request signals:", callRequestSignals.length);
-        for (const signal of callRequestSignals) {
-          await clearSignal({ signalId: signal._id });
-        }
-      }
-      
-      // Send acceptance signal
-      await sendSignal({
-        conversationId: conversation._id,
-        toEmail: conversation.otherUserEmail,
-        type: "call-accepted",
-      });
-      
-      console.log("[ConversationView] Call accepted, opening video call modal");
-      setShowIncomingCall(false);
-      setIsCallInitiator(false);
-      setIsVideoCallActive(true);
-    } catch (permError: any) {
-      console.error("Accept call error:", permError);
-      let errorMsg = "Cannot accept call: " + (permError.message || "Unknown error");
-      alert(errorMsg);
-      setShowIncomingCall(false);
-    }
-  };
-
-  const handleRejectCall = async () => {
-    try {
-      await sendSignal({
-        conversationId: conversation._id,
-        toEmail: conversation.otherUserEmail,
-        type: "call-rejected",
-      });
-      setShowIncomingCall(false);
-    } catch (error) {
-      console.error("Failed to reject call:", error);
-    }
-  };
-
-  const handleCloseVideoCall = () => {
-    setIsVideoCallActive(false);
-    setIsCallInitiator(false);
-  };
-
   return (
     <div className="flex flex-col h-screen w-full">
       {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b border-[#53473c] bg-[#181411]">
-        <div className="flex flex-row w-full gap-3 items-center ">
-          <Button
-            onClick={onBack}
-            className="md:hidden text-white hover:text-[#e67919]"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </Button>
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-[#181411] flex items-center justify-center text-white font-semibold">
-            {conversation.otherUserAvatar ? (
-              <Image
-                src={conversation.otherUserAvatar}
-                alt={conversation.otherUserName}
-                width={40}
-                height={40}
-              />
-            ) : (
-              <span className="text-sm">{conversation.otherUserName[0]}</span>
-            )}
-          </div>
-          <div>
-            <h2 className="text-white font-semibold">
-              {conversation.otherUserName}
-            </h2>
-            <p className="text-[#b8aa9d] text-xs">
-              {isTyping
-                ? "typing..."
-                : userStatus?.isOnline
-                  ? "Active now"
-                  : "Offline"}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-row">
-          <PhoneCall className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer" />
-          <VideoIcon
-            onClick={handleStartVideoCall}
-            className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer ml-4"
-          />
-          <MenuIcon className="w-5 h-5 text-white hover:text-[#e67919] cursor-pointer ml-4" />
-        </div>
-      </div>
+      <ConversationHeader
+        conversation={conversation}
+        isTyping={isTyping}
+        userStatus={userStatus}
+        onBack={onBack}
+        onVideoCall={handleStartVideoCall}
+      />
 
       {/* Messages */}
       <div
@@ -396,118 +198,37 @@ export default function ConversationView({ conversation, onBack }: any) {
           messages.map((message: any) => {
             const isOwn = message.senderEmail !== conversation.otherUserEmail;
             return (
-              <div
+              <MessageBubble
                 key={message._id}
-                className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                    isOwn
-                      ? "bg-[#e67919] text-white"
-                      : "bg-[#26211c] text-white border border-[#53473c]"
-                  }`}
-                >
-                  <p className="wrap-break-word">{message.body}</p>
-                  <span
-                    className={`text-xs mt-1 block ${
-                      isOwn ? "text-[#211811]" : "text-[#b8aa9d]"
-                    }`}
-                  >
-                    {new Date(message.createdAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
-              </div>
+                message={message}
+                isOwn={isOwn}
+                conversation={conversation}
+                isLastRead={message._id === lastReadMessageId}
+              />
             );
           })
         )}
 
         {/* Typing indicator */}
-        {isTyping && (
-          <div className="flex justify-start">
-            <div className="bg-[#26211c] border border-[#53473c] rounded-lg px-4 py-3">
-              <div className="flex gap-1 items-end h-6">
-                <span className="w-2.5 h-2.5 bg-[#b8aa9d] rounded-full typing-dot-1"></span>
-                <span className="w-2.5 h-2.5 bg-[#b8aa9d] rounded-full typing-dot-2"></span>
-                <span className="w-2.5 h-2.5 bg-[#b8aa9d] rounded-full typing-dot-3"></span>
-              </div>
-            </div>
-          </div>
-        )}
+        {isTyping && <TypingIndicator />}
       </div>
 
       {/* Input Message*/}
-      <form
-        onSubmit={handleSend}
-        className="p-4 border-t border-[#53473c] bg-[#181411]"
-      >
-        <div className="flex gap-2 items-center">
-          <PlusCircleIcon className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer" />
-          <ImageIcon className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer" />
-          <ScanFace className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer" />
-          <div className="flex-1 px-2 flex items-center bg-[#211811] text-white placeholder-[#b8aa9d] rounded-lg  focus-within:ring-2 focus-within:ring-[#e67919]">
-            <SmileIcon className="w-6 h-6 text-white hover:text-[#e67919] cursor-pointer" />
-            <input
-              type="text"
-              value={messageText}
-              onChange={(e) => handleTyping(e.target.value)}
-              placeholder="Type a message..."
-              className="w-full px-2 py-2 bg-transparent outline-none rounded-lg"
-              disabled={sending}
-            />
-          </div>
-          <Button
-            type="submit"
-            disabled={!messageText.trim() || sending}
-            className="bg-[#e67919] hover:bg-[#cf6213] disabled:bg-[#53473c] text-white rounded-lg px-4 py-2 transition-colors"
-          > 
-            <Send className="w-5 h-5" />
-          </Button>
-        </div>
-      </form>
+      <MessageInput
+        messageText={messageText}
+        sending={sending}
+        inputRef={inputRef}
+        onTyping={handleTyping}
+        onSend={handleSend}
+      />
 
       {/* Incoming Call Notification */}
       {showIncomingCall && (
-        <div className="fixed inset-0 z-40 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-[#181411] border border-[#53473c] rounded-lg p-6 max-w-sm w-full mx-4">
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full overflow-hidden bg-[#26211c] flex items-center justify-center text-white font-semibold mx-auto mb-4">
-                {conversation.otherUserAvatar ? (
-                  <Image
-                    src={conversation.otherUserAvatar}
-                    alt={conversation.otherUserName}
-                    width={80}
-                    height={80}
-                  />
-                ) : (
-                  <span className="text-2xl">
-                    {conversation.otherUserName[0]}
-                  </span>
-                )}
-              </div>
-              <h3 className="text-white text-xl font-semibold mb-2">
-                {conversation.otherUserName}
-              </h3>
-              <p className="text-[#b8aa9d] mb-6">Incoming video call...</p>
-              <div className="flex gap-4">
-                <Button
-                  onClick={handleRejectCall}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                >
-                  Decline
-                </Button>
-                <Button
-                  onClick={handleAcceptCall}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                >
-                  Accept
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <IncomingCallNotification
+          conversation={conversation}
+          onAccept={handleAcceptCall}
+          onReject={handleRejectCall}
+        />
       )}
 
       {/* Video Call Modal */}

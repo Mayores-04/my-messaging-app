@@ -75,12 +75,22 @@ export const getMessagesForConversation = query({
       .order('asc')
       .collect()
 
+    // Determine the last-read timestamp for the OTHER user in this conversation
+    const isUser1 = conversation.user1Email === identity.email
+    const otherUserLastReadAt = isUser1
+      ? (conversation.user2LastReadAt ?? 0)
+      : (conversation.user1LastReadAt ?? 0)
+
     return messages.map((m) => ({
       _id: m._id,
       conversationId: m.conversationId,
       senderEmail: m.senderEmail,
       body: m.body,
       createdAt: m._creationTime,
+      // Mark whether this message (sent by the current user) has been read by the other user
+      readByOther:
+        // Only messages authored by the current user can be "read by the other"
+        (m.senderEmail === identity.email) && (m._creationTime <= otherUserLastReadAt),
     }))
   },
 })
