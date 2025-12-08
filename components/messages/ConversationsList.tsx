@@ -3,6 +3,7 @@ import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation } from "convex/react";
 import Image from "next/image";
 import { useMemo, memo } from "react";
+import { useUser } from "@clerk/nextjs";
 
 interface ConversationsListProps {
   onSelectConversation: (conversation: any) => void;
@@ -10,6 +11,7 @@ interface ConversationsListProps {
 }
 
 function ConversationsList({ onSelectConversation, selectedId }: ConversationsListProps) {
+  const { user } = useUser();
   const conversations = useQuery(api.messages.getConversationsForCurrentUser);
   const friends = useQuery(api.friends.getFriendsForCurrentUser);
   const getOrCreateConversation = useMutation(api.messages.getOrCreateConversation);
@@ -114,7 +116,9 @@ function ConversationsList({ onSelectConversation, selectedId }: ConversationsLi
               </div>
               <div className="flex items-center justify-between">
                 <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'text-white font-semibold' : 'text-[#b8aa9d]'}`}>
-                  {conv.lastMessage}
+                  {user?.emailAddresses[0]?.emailAddress && conv.acceptedBy?.includes(user.emailAddresses[0].emailAddress) 
+                    ? conv.lastMessage 
+                    : "Message Request"}
                 </p>
               </div>
             </div>

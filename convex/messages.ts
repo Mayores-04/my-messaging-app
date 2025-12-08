@@ -357,6 +357,7 @@ export const getConversationsForCurrentUser = query({
         lastMessageAt: conv.lastMessageAt ?? conv.createdAt,
         unreadCount,
         isOnline,
+        acceptedBy: conv.acceptedBy,
       }
     })
   },

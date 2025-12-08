@@ -341,35 +341,27 @@ function MessageBubble({
                       <Eye className="w-3 h-3" />
                       Peek
                     </button>
-                    <button
-                      onClick={handleAccept}
-                      className="bg-[#e67919] hover:bg-[#cf6213] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
-                    >
-                      <Check className="w-3 h-3" />
-                      Accept
-                    </button>
-                    <button
-                      onClick={handleDelete}
-                      className="bg-red-500/20 hover:bg-red-500/30 text-red-500 border border-red-500/50 text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      Delete
-                    </button>
                   </div>
                 </div>
               ) : (
-                <div className={`relative ${isContentBlurred ? "filter blur-md select-none" : ""}`}>
+                <div className="relative">
                   {isContentBlurred && (
-                    <div className="absolute inset-0 z-20 flex items-center justify-center">
+                    <div 
+                        className="absolute inset-0 z-20 flex items-center justify-center cursor-pointer"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setViewLevel(2);
+                        }}
+                    >
                       <button
-                        onClick={() => setViewLevel(2)}
-                        className="bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-sm transition-all flex items-center gap-2"
+                        className="bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-sm transition-all flex items-center gap-2 pointer-events-none"
                       >
                         <Eye className="w-4 h-4" />
                         Tap to View
                       </button>
                     </div>
                   )}
+                  <div className={`${isContentBlurred ? "filter blur-md select-none" : ""}`}>
                   {message.images.length === 1 ? (
                     <img
                       src={message.images[0]}
@@ -448,6 +440,7 @@ function MessageBubble({
                         ))}
                     </div>
                   )}
+                  </div>
                 </div>
               )}
             </div>
@@ -458,41 +451,33 @@ function MessageBubble({
                   <p className="text-[#b8aa9d] text-sm text-center">Message Request</p>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setViewLevel(1)}
+                      onClick={() => setViewLevel(message.images && message.images.length > 0 ? 1 : 2)}
                       className="bg-[#53473c] hover:bg-[#3a332c] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
                     >
                       <Eye className="w-3 h-3" />
-                      Peek
-                    </button>
-                    <button
-                      onClick={handleAccept}
-                      className="bg-[#e67919] hover:bg-[#cf6213] text-white text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
-                    >
-                      <Check className="w-3 h-3" />
-                      Accept
-                    </button>
-                    <button
-                      onClick={handleDelete}
-                      className="bg-red-500/20 hover:bg-red-500/30 text-red-500 border border-red-500/50 text-xs px-3 py-1.5 rounded-full transition-colors flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      Delete
+                      {message.images && message.images.length > 0 ? "Peek" : "View"}
                     </button>
                   </div>
                </div>
             ) : (
-              <div className={`relative ${isContentBlurred ? "filter blur-md select-none" : ""}`}>
+              <div className="relative">
                 {isContentBlurred && (
-                    <div className="absolute inset-0 z-20 flex items-center justify-center">
+                    <div 
+                        className="absolute inset-0 z-20 flex items-center justify-center cursor-pointer"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setViewLevel(2);
+                        }}
+                    >
                       <button
-                        onClick={() => setViewLevel(2)}
-                        className="bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-sm transition-all flex items-center gap-2"
+                        className="bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-sm transition-all flex items-center gap-2 pointer-events-none"
                       >
                         <Eye className="w-4 h-4" />
                         Tap to View
                       </button>
                     </div>
                 )}
+                <div className={`${isContentBlurred ? "filter blur-md select-none" : ""}`}>
                 {isEditing ? (
                   <div className="flex flex-col gap-2">
                     <input
@@ -532,6 +517,7 @@ function MessageBubble({
                     )}
                   </>
                 )}
+                </div>
               </div>
             )
           )}
